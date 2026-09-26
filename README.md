@@ -42,7 +42,7 @@ The repo root is the `predictive_safety` Odoo module itself (clone it into a fol
 ├── coppeliasim/          # 3D scene + Lua script (the /Distillation_Column child script)
 ├── check_db.py           # Helper: lists Odoo databases
 ├── scripts/              # seed_equipment.py: creates/updates the 5 pipe records and their limits
-├── matlab/               # (planned) Safety-envelope functions (check_reactor, check_pipeline, etc.)
+├── matlab/               # check_pressure.m: SAFE / AT_RISK / CRITICAL pressure check, with test_check_pressure.m
 └── docs/                 # (planned) Architecture diagrams, notes
 ```
 
