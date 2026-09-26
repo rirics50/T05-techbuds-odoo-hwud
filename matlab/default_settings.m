@@ -71,5 +71,15 @@ function s = default_settings()
     % pressure. Do NOT guess the response shape; wire it in once confirmed.
     s.fetch_fn = [];   % raw = fetch_fn(location) -> struct for adapt_reading. REQUIRED.
     s.send_fn  = [];   % [ok, msg] = send_fn(url, payload); overrides send_http
+
+    % Hooks used by the dashboard and the periodic limits reload ([] = off).
+    s.on_cycle = [];   % on_cycle(entries, info) after every cycle; an error in it is
+                       % caught and printed, it can never stop the safety loop
+    s.stop_fn  = [];   % return true to end the loop (e.g. the dashboard window closed)
+    s.limits_reload_fn = [];          % [limits, geometry, specs] = fn(); called every
+    s.limits_reload_interval_s = 30;  % this many seconds. A failed reload keeps the
+                                      % previous limits. 30 s: limits rarely change, and
+                                      % this is 5 extra GETs every 30 s, not every cycle.
+    s.limits_specs = [];              % raw Odoo records the current limits came from
     s.now_fn   = [];   % epoch seconds; default is the real clock
 end

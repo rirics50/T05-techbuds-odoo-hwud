@@ -10,6 +10,9 @@ function [history, state] = run_safety_loop(settings, cfg)
 %
 %   history       cell array, one poll_cycle entries array per iteration
 %
+%   Optional hooks (see default_settings): on_cycle (display callback), stop_fn,
+%   and limits_reload_fn / limits_reload_interval_s for periodic limit reloads.
+%
 %   Run with settings.send_http = false (the default) to test the polling and
 %   decision logic with nothing leaving the machine.
 %   Stop a run-forever loop with Ctrl-C.
@@ -25,13 +28,66 @@ function [history, state] = run_safety_loop(settings, cfg)
     history   = {};
     state = [];
     iter  = 0;
+    last_reload   = tic;   % when limits were last (re)loaded, successfully or not
+    last_ok       = tic;   % when they were last loaded successfully
+    reload_fails  = 0;
+    specs_now     = settings.limits_specs;
     while iter < settings.max_iterations
+        % Nested ifs: '&' would call stop_fn even when it is empty.
+        if ~isempty(settings.stop_fn)
+            if settings.stop_fn()
+                break
+            end
+        end
         t0 = tic;
+
+        % ---- Periodic limits reload (so an Odoo limit can change mid-session) ----
+        changes = {};
+        if ~isempty(settings.limits_reload_fn)
+            if toc(last_reload) >= settings.limits_reload_interval_s
+                last_reload = tic;
+                try
+                    [new_limits, new_geo, new_specs] = settings.limits_reload_fn();
+                    changes = diff_limits(specs_now, new_specs);
+                    settings.limits = new_limits;
+                    settings.pipe_geometry_by_location = new_geo;
+                    specs_now = new_specs;
+                    last_ok = tic;
+                    reload_fails = 0;
+                    for k = 1:numel(changes)
+                        fprintf('*** %s\n', changes{k});
+                    end
+                catch err
+                    % Keep judging with the previous limits; never stop mid-demo.
+                    reload_fails = reload_fails + 1;
+                    fprintf('!!! limits reload failed (%d in a row), keeping previous limits: %s\n', ...
+                            reload_fails, err.message);
+                end
+            end
+        end
+
         try
             [entries, state] = poll_cycle(cfg, settings, state);
             history{end + 1} = entries; %#ok<AGROW>
             if settings.verbose
                 print_cycle(entries);
+            end
+
+            % ---- Optional display hook. Purely observational. ----
+            if ~isempty(settings.on_cycle)
+                info = struct('iteration', iter + 1, 'now_s', entries(1).poll_time_s, ...
+                              'cfg', cfg, 'send_http', settings.send_http, ...
+                              'opts', settings.opts, 'limits', settings.limits, ...
+                              'limits_age_s', toc(last_ok), ...
+                              'limits_reloading', ~isempty(settings.limits_reload_fn), ...
+                              'limits_reload_interval_s', settings.limits_reload_interval_s, ...
+                              'limits_fail_count', reload_fails, ...
+                              'limit_changes', {changes});
+                try
+                    settings.on_cycle(entries, info);
+                catch hook_err
+                    fprintf('!!! display update failed (safety loop continues): %s\n', hook_err.message);
+                end
             end
         catch err
             % An unexpected error must not silently kill the safety loop

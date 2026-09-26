@@ -11,7 +11,9 @@ function [entries, state] = poll_cycle(cfg, settings, state)
 %
 %   entries   1 x N struct array, one per location, with fields
 %             location, status, odoo_status, action, valve_command, reason,
-%             shutdown_signal, url, sent, send_msg, skipped, error
+%             shutdown_signal, url, sent, send_msg, skipped, error,
+%             and, for display only (they never affect a decision):
+%             poll_time_s, raw (as fetched), reading (adapted, SI), limits (used)
 %
 %   One location failing (fetch error, bad config, a bug) never stops the
 %   others: its error is recorded in entries(k).error and the loop moves on.
@@ -56,6 +58,7 @@ function [entries, state] = poll_cycle(cfg, settings, state)
 end
 
 function [e, state] = process_location(e, loc, cfg, settings, state, now_s, send_fn)
+    e.poll_time_s = now_s;
     if ~isfield(state.fail_count, loc)
         state.fail_count.(loc) = 0;      % dynamic field name via (...)
     end
@@ -99,6 +102,10 @@ function [e, state] = process_location(e, loc, cfg, settings, state, now_s, send
     if isfield(state.prev, loc)
         prev = state.prev.(loc);
     end
+
+    e.raw     = raw;                    % kept only so a dashboard can show them
+    e.reading = reading;
+    e.limits  = settings.limits.(loc);
 
     result  = combine_checks(reading, settings.limits.(loc), pp, prev, settings.opts);
     payload = to_odoo_payload(result);
@@ -201,5 +208,6 @@ function e = blank_entry(loc)
     e = struct('location', loc, 'status', '', 'odoo_status', '', 'action', '', ...
                'valve_command', NaN, 'reason', '', 'shutdown_signal', NaN, ...
                'url', '', 'sent', false, 'send_msg', '', ...
-               'skipped', false, 'error', '');
+               'skipped', false, 'error', '', ...
+               'poll_time_s', NaN, 'raw', [], 'reading', [], 'limits', []);
 end

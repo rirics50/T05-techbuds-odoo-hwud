@@ -19,6 +19,12 @@ function [history, state] = run_safety_loop_live(settings)
 %   limits instead. If Odoo's limits can't be loaded the run stops with an error;
 %   it never silently falls back.
 %
+%   PERIODIC RELOAD: after that first load, the limits are re-read from Odoo every
+%   settings.limits_reload_interval_s seconds (default 30), so Riya can change a
+%   limit mid-session without a restart. A change is printed ('*** LIMIT CHANGE
+%   ...'); a failed reload keeps the previous limits and warns. Pass
+%   struct('limits_reload_interval_s', 60) to change the interval.
+%
 %   Not used by the tests: test_run_safety_loop uses fake data on purpose.
 
     if nargin < 1
@@ -46,7 +52,15 @@ function [history, state] = run_safety_loop_live(settings)
         locs = getfield_or(settings, 'locations', d.locations);
         [settings.limits, settings.pipe_geometry_by_location, specs] = ...
             load_limits_from_odoo(locs, cfg, getfield_or(settings, 'http_timeout_s', 5));
-        fprintf('Limits loaded from Odoo (raw units as stored there):\n');
+        % Keep what we loaded so later reloads can report what changed, and set up
+        % the periodic reload (run_safety_loop does the timing).
+        settings.limits_specs = specs;
+        if isempty(getfield_or(settings, 'limits_reload_fn', []))
+            settings.limits_reload_fn = @() load_limits_from_odoo(locs, cfg, ...
+                                                getfield_or(settings, 'http_timeout_s', 5));
+        end
+        reload_s = getfield_or(settings, 'limits_reload_interval_s', 30);
+        fprintf('Limits loaded from Odoo (raw units as stored there); reloaded every %g s:\n', reload_s);
         for k = 1:numel(locs)
             sp = specs.(locs{k});
             fprintf('  %-18s %5.1f PSI  %5.1f F  flow %.3f kg/s  L %.1f m  D %.1f in\n', ...
