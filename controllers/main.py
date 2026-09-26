@@ -77,6 +77,25 @@ class PredictiveSafetyController(http.Controller):
             'last_updated': _utc_iso(latest.timestamp) if latest else None,
         })
 
+    @http.route('/api/safety_status/<string:equipment_name>', type='jsonrpc', auth='public', methods=['POST'], csrf=False)
+    def post_safety_status(self, equipment_name, **kwargs):
+        equipment = _find_equipment(equipment_name)
+        if not equipment:
+            return {'error': f'No equipment found with name "{equipment_name}"'}
+
+        status = kwargs.get('status', '').lower()
+        reason = kwargs.get('reason')
+
+        if status not in ('safe', 'warning', 'critical'):
+            return {'error': f'Invalid status "{status}" - must be safe, warning, or critical'}
+
+        if not equipment.receive_safety_reading(status, pressure=equipment.last_pressure, reason=reason):
+            return {
+                'error': f'{equipment.name} is latched CRITICAL - Manual Reset in Odoo is required before new statuses apply',
+                'status': equipment.current_status,
+            }
+        return {'ok': True, 'status': status}
+
     @http.route('/api/live_readings/<string:equipment_name>', type='jsonrpc', auth='public', methods=['POST'], csrf=False)
     def post_live_reading(self, equipment_name, **kwargs):
         """One pipe's live reading from ros_bridge.py:
