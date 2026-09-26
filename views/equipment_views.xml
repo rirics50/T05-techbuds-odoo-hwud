@@ -51,6 +51,17 @@
                             <field name="pipe_length"/>
                         </group>
                     </group>
+                    <notebook>
+                        <page string="Pressure History" name="pressure_history">
+                            <field name="pressure_chart" nolabel="1" readonly="1"/>
+                            <field name="reading_ids" readonly="1">
+                                <list limit="10">
+                                    <field name="timestamp"/>
+                                    <field name="pressure"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
                 </sheet>
             </form>
         </field>
