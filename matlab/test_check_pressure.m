@@ -44,17 +44,25 @@ assert(strcmp(r.status, 'SAFE'));
 
 % ---- Rate of change ----
 
-% 3.0 -> 3.2 bar in 1 s = 20000 Pa/s > 5000 placeholder -> AT_RISK though far below limit
-r = check_pressure(mk(3.2, 1), limit, mk(3.0, 0));
+% 3.0 -> 3.4 bar in 1 s = 40000 Pa/s > 20000 placeholder -> AT_RISK though far below limit
+r = check_pressure(mk(3.4, 1), limit, mk(3.0, 0));
 assert(strcmp(r.status, 'AT_RISK') & strcmp(r.action, 'ADJUST_VALVE'));
 assert(~isempty(strfind(r.reason, 'dP/dt')));
+
+% Worst-case sensor noise (+/-0.5 PSI -> consecutive samples 1 PSI = 6895 Pa apart,
+% 6895 Pa/s at a 1 s poll) must NOT trip: this is why the threshold is 20000
+r = check_pressure(mk(3.06895, 1), limit, mk(3.0, 0));
+assert(strcmp(r.status, 'SAFE'));
+% ... even if timing jitter halves the interval (13790 Pa/s, still under 20000)
+r = check_pressure(mk(3.06895, 0.5), limit, mk(3.0, 0));
+assert(strcmp(r.status, 'SAFE'));
 
 % Slow rise: 100 Pa/s -> SAFE
 r = check_pressure(mk(3.001, 1), limit, mk(3.0, 0));
 assert(strcmp(r.status, 'SAFE'));
 
 % Fast FALL must not trip the rate check
-r = check_pressure(mk(3.0, 1), limit, mk(3.2, 0));
+r = check_pressure(mk(3.0, 1), limit, mk(3.4, 0));
 assert(strcmp(r.status, 'SAFE'));
 
 % Rate never downgrades CRITICAL
@@ -62,7 +70,7 @@ r = check_pressure(mk(6.1, 1), limit, mk(6.0, 0));
 assert(strcmp(r.status, 'CRITICAL') & r.valve_command == 0);
 
 % Rate limit is an argument: same jump, looser threshold -> SAFE
-r = check_pressure(mk(3.2, 1), limit, mk(3.0, 0), struct('rate_limit_Pa_per_s', 50000));
+r = check_pressure(mk(3.4, 1), limit, mk(3.0, 0), struct('rate_limit_Pa_per_s', 50000));
 assert(strcmp(r.status, 'SAFE'));
 
 % ---- No previous reading: must not crash ----

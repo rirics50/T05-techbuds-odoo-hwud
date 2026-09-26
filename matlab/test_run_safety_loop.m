@@ -86,6 +86,56 @@ assert(ct.shutdown_signal == 0 & has(ct.reason, 'would adjust valve to 50%'));
 % the other four had no jump, so they are unaffected (history is per location)
 assert(all(strcmp({e([1 2 4 5]).odoo_status}, 'safe')));
 
+% ---- Idle baseline with WORST-CASE noise, DEFAULT limits and thresholds ----
+% Regression test for the two tuning bugs: (1) the Kelvin margin left hot
+% locations in permanent 'warning', (2) rate limits below the scene's noise
+% caused false trips. Baselines and noise ranges are from the Lua scene:
+% temp +/-1 F, pressure +/-0.5 PSI, flow +/-0.3 gpm. Noise alternates between
+% the two extremes each second, the largest possible consecutive-sample swing.
+base = struct( ...
+    'feed_pipeline',     [ 90  30 2.0], ...   % [temp_F  press_psi  flow_gpm]
+    'column_bottom',     [170  49 2.2], ...
+    'column_top',        [135  40 1.8], ...
+    'bottoms_output',    [165  48 2.2], ...
+    'distillate_output', [140  42 1.8]);
+noise = [1 0.5 0.3];
+sd = default_settings();                  % default limits AND default thresholds
+sd.fetch_fn = @(loc) world_fetch(world, loc);
+sd.now_fn   = @() clk('now');
+sd.send_fn  = @(u, p) record_send(rec, u, p);
+sd.verbose  = false;
+state_b = [];
+for cyc = 1:6
+    sgn = 1 - 2 * mod(cyc, 2);            % +1, -1, +1, ...
+    w = struct();
+    for k = 1:numel(locs)
+        v = base.(locs{k}) + sgn * noise;
+        w.(locs{k}) = struct('temperature_F', v(1), 'pressure_psi', v(2), 'flow_gpm', v(3));
+    end
+    world('raw') = w;
+    clk('now') = 2000 + cyc;              % 1 s apart
+    [e, state_b] = poll_cycle(cfg, sd, state_b);
+    assert(all(strcmp({e.odoo_status}, 'safe')));   % no warning, no false rate trip
+end
+
+% ---- Top of a full spike (minus worst-case noise) DOES trip every location ----
+top = struct( ...
+    'feed_pipeline',     [105  38 2.8], ...   % base + range from the Lua scene
+    'column_bottom',     [192  63 3.2], ...
+    'column_top',        [155  52 3.0], ...
+    'bottoms_output',    [187  62 3.2], ...
+    'distillate_output', [160  54 3.0]);
+w = struct();
+for k = 1:numel(locs)
+    v = top.(locs{k}) - noise;
+    w.(locs{k}) = struct('temperature_F', v(1), 'pressure_psi', v(2), 'flow_gpm', v(3));
+end
+world('raw') = w;
+clk('now') = 2100;
+[e, ~] = poll_cycle(cfg, sd);
+assert(all(strcmp({e.odoo_status}, 'critical')) & all([e.shutdown_signal] == 1));
+world('raw') = make_world(locs, normal);    % restore for the tests below
+
 % ---- Send failure: recorded, cycle survives, next cycle still has history ----
 s3 = settings;  s3.send_fn = @(u, p) deal(false, 'HTTP 500');
 w = world('raw');  w.column_top.pressure_psi = 30;  world('raw') = w;

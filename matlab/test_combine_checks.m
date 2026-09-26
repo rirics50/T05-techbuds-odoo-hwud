@@ -2,7 +2,7 @@
 % Run: test_combine_checks
 
 % Limits: pressure 5 bar (AT_RISK from 4.5), temperature 150 C (AT_RISK from
-% ~107.7 C, margin is on the Kelvin value), flow 10 kg/s (AT_RISK from 9).
+% 135 C), flow 10 kg/s (AT_RISK from 9).
 limits = struct('pressure_bar', 5, 'temperature_c', 150, 'flow_kg_s', 10);
 pp = struct('pipe_diameter', 0.1, 'pipe_length', 10, ...
             'fluid_density', 1000, 'fluid_viscosity', 1e-3);
@@ -27,7 +27,7 @@ r = combine_checks(mk(4.7, 80, 5, 0), limits, pp);       % pressure AT_RISK
 assert(strcmp(r.status, 'AT_RISK') & strcmp(r.action, 'ADJUST_VALVE'));
 assert(has(r.reason, 'Pressure:') & ~has(r.reason, 'Temperature:') & ~has(r.reason, 'Flow:'));
 
-r = combine_checks(mk(3, 120, 5, 0), limits, pp);        % temperature AT_RISK
+r = combine_checks(mk(3, 140, 5, 0), limits, pp);        % temperature AT_RISK
 assert(strcmp(r.status, 'AT_RISK') & has(r.reason, 'Temperature:'));
 assert(~has(r.reason, 'Pressure:') & ~has(r.reason, 'Flow:'));
 
@@ -35,7 +35,7 @@ r = combine_checks(mk(3, 80, 9.5, 0), limits, pp);       % flow AT_RISK
 assert(strcmp(r.status, 'AT_RISK') & has(r.reason, 'Flow:'));
 
 % ---- Worst wins: CRITICAL beats AT_RISK regardless of which check is which ----
-r = combine_checks(mk(6, 120, 5, 0), limits, pp);        % P CRITICAL, T AT_RISK
+r = combine_checks(mk(6, 140, 5, 0), limits, pp);        % P CRITICAL, T AT_RISK
 assert(strcmp(r.status, 'CRITICAL') & strcmp(r.action, 'SHUTDOWN') & r.valve_command == 0);
 
 r = combine_checks(mk(4.7, 80, 12, 0), limits, pp);      % P AT_RISK, F CRITICAL
@@ -45,13 +45,13 @@ r = combine_checks(mk(3, 160, 5, 0), limits, pp);        % T CRITICAL only
 assert(strcmp(r.status, 'CRITICAL') & r.valve_command == 0);
 
 % ---- Reason concatenation: every non-SAFE check, none of the SAFE ones ----
-r = combine_checks(mk(6, 120, 5, 0), limits, pp);        % P CRITICAL + T AT_RISK
+r = combine_checks(mk(6, 140, 5, 0), limits, pp);        % P CRITICAL + T AT_RISK
 assert(has(r.reason, 'Pressure:') & has(r.reason, 'Temperature:') & ~has(r.reason, 'Flow:'));
 assert(has(r.reason, ' | '));
 % order is fixed: pressure, temperature, flow
 assert(strfind(r.reason, 'Pressure:') < strfind(r.reason, 'Temperature:'));
 
-r = combine_checks(mk(4.7, 120, 9.5, 0), limits, pp);    % all three AT_RISK
+r = combine_checks(mk(4.7, 140, 9.5, 0), limits, pp);    % all three AT_RISK
 assert(strcmp(r.status, 'AT_RISK'));
 assert(has(r.reason, 'Pressure:') & has(r.reason, 'Temperature:') & has(r.reason, 'Flow:'));
 assert(r.valve_command == 50);                            % shared adjust_valve_command
@@ -66,7 +66,7 @@ assert(strcmp(r.status, 'CRITICAL') & strcmp(r.action, 'SHUTDOWN') & r.valve_com
 assert(has(r.reason, 'Temperature:') & ~has(r.reason, 'Pressure:'));
 
 % ---- Previous reading is forwarded; a rate trip surfaces in the reason ----
-r = combine_checks(mk(3.2, 80, 5, 1), limits, pp, mk(3.0, 80, 5, 0));   % dP/dt 20000 Pa/s
+r = combine_checks(mk(3.4, 80, 5, 1), limits, pp, mk(3.0, 80, 5, 0));   % dP/dt 40000 Pa/s
 assert(strcmp(r.status, 'AT_RISK') & has(r.reason, 'dP/dt'));
 
 % No previous reading given (omitted, or []): must not crash

@@ -14,12 +14,12 @@ function result = check_pressure(reading, pressure_safety_limit_bar, previous_re
 %   opts                        optional struct overriding the defaults, which live
 %                               in safety_defaults.m (shared with check_temperature):
 %     margin_fraction          0.9    AT_RISK starts at this fraction of the limit.
-%     rate_limit_Pa_per_s      5000   *** PLACEHOLDER, NEEDS CONFIRMATION ***
+%     rate_limit_Pa_per_s      20000  *** PLACEHOLDER, NEEDS CONFIRMATION ***
 %                                     (Noel + Riya). Overlay section 17 defines
 %                                     dP/dt in Pa/s but gives NO safety threshold
 %                                     and there is no pressure_rate_safety_limit
-%                                     in the fixed user inputs. 5000 Pa/s =
-%                                     0.05 bar/s is a guess, not an engineering value.
+%                                     in the fixed user inputs. 20000 Pa/s =
+%                                     0.2 bar/s is tuned to the scene's sensor noise, not an engineering value (see safety_defaults.m).
 %     adjust_valve_command     50     PLACEHOLDER valve % for AT_RISK/ADJUST_VALVE.
 %
 %   result   struct: location, status, action, valve_command, reason

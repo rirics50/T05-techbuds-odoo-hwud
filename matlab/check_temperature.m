@@ -80,7 +80,11 @@ function result = check_temperature(reading, temperature_safety_limit_c, previou
     end
 
     % ---- Classification, most severe first ----
-    margin_K = opts.margin_fraction * limit_K;
+    % The margin is a fraction of the limit in DEG C, converted to K only for
+    % the comparison (T_K is already Kelvin). 0.9 of a Kelvin value would put the
+    % band ~36 K below the limit, since Kelvin's zero is far below Celsius's.
+    % Assumes a positive limit in C (a fraction of a negative limit inverts).
+    margin_K = opts.margin_fraction * temperature_safety_limit_c + 273.15;
 
     % >= (not >): sitting exactly on the limit already counts as a breach.
     if T_K >= limit_K
