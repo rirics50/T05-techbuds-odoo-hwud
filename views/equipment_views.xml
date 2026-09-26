@@ -10,6 +10,7 @@
                 <field name="grade"/>
                 <field name="diameter"/>
                 <field name="thickness"/>
+                <field name="last_pressure"/>
                 <field name="current_status"/>
                 <field name="valve_state"/>
             </list>
@@ -32,6 +33,10 @@
                                    decoration-danger="current_status == 'critical'"
                                    decoration-warning="current_status == 'warning'"
                                    decoration-success="current_status == 'safe'"/>
+                            <field name="last_pressure"/>
+                            <field name="temperature"/>
+                            <field name="flow_rate"/>
+                            <field name="last_updated"/>
                             <field name="valve_state" widget="badge"
                                    decoration-danger="valve_state == 'closed'"
                                    decoration-success="valve_state == 'open'"/>

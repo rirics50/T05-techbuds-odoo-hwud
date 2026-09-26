@@ -1,2 +1,3 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_predictive_safety_pipeline,access.predictive.safety.pipeline,model_predictive_safety_pipeline,base.group_user,1,1,1,1
+access_predictive_safety_pressure_reading,access.predictive.safety.pressure.reading,model_predictive_safety_pressure_reading,base.group_user,1,1,1,1
