@@ -53,6 +53,19 @@ class PipelineEquipment(models.Model):
     flow_rate = fields.Float(string='Flow Rate (gpm)', readonly=True)
     valve_position = fields.Float(string='Valve Position (0 open, 1 closed)', readonly=True)
     last_updated = fields.Datetime(string='Last Updated', readonly=True)
+
+    # Fluid properties used by MATLAB's hydraulics (defaults: water at ~20 °C)
+    fluid_density = fields.Float(string='Fluid Density (kg/m³)', default=1000.0)
+    fluid_viscosity = fields.Float(string='Fluid Viscosity (Pa·s)', default=0.001, digits=(12, 6))
+
+    # Engineering results computed by MATLAB, posted via
+    # /api/engineering_results/<location>. SI units, as MATLAB computes them
+    velocity = fields.Float(string='Velocity (m/s)', digits=(12, 5), readonly=True)
+    reynolds_number = fields.Float(string='Reynolds Number', digits=(12, 1), readonly=True)
+    friction_factor = fields.Float(string='Friction Factor', digits=(12, 5), readonly=True)
+    pressure_drop = fields.Float(string='Pressure Drop (Pa)', digits=(12, 4), readonly=True)
+    temperature_rate = fields.Float(string='Temperature Rate (K/s)', digits=(12, 3), readonly=True)
+    pressure_rate = fields.Float(string='Pressure Rate (Pa/s)', digits=(12, 1), readonly=True)
     pressure_chart = fields.Html(string='Pressure Chart', compute='_compute_pressure_chart', sanitize=False)
 
     @api.depends('reading_ids.pressure', 'reading_ids.timestamp')

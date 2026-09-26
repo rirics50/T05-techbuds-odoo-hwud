@@ -47,6 +47,7 @@
                             <field name="valve_state" widget="badge"
                                    decoration-danger="valve_state == 'closed'"
                                    decoration-success="valve_state == 'open'"/>
+                            <field name="valve_position"/>
                         </group>
                         <group>
                             <field name="diameter"/>
@@ -56,6 +57,20 @@
                             <field name="design_pressure"/>
                             <field name="flow_limit"/>
                             <field name="pipe_length"/>
+                            <field name="fluid_density"/>
+                            <field name="fluid_viscosity"/>
+                        </group>
+                    </group>
+                    <group string="Engineering Results" name="engineering_results">
+                        <group>
+                            <field name="velocity"/>
+                            <field name="reynolds_number"/>
+                            <field name="friction_factor"/>
+                        </group>
+                        <group>
+                            <field name="pressure_drop"/>
+                            <field name="temperature_rate"/>
+                            <field name="pressure_rate"/>
                         </group>
                     </group>
                     <notebook>

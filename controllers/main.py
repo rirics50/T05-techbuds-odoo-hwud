@@ -7,6 +7,10 @@ import json
 # The 5 monitored locations; each is its own equipment record, named exactly this
 LOCATIONS = ['feed_pipeline', 'column_bottom', 'column_top', 'bottoms_output', 'distillate_output']
 
+# Engineering results MATLAB posts back per location (SI units)
+ENGINEERING_RESULTS = ['velocity', 'reynolds_number', 'friction_factor',
+                       'pressure_drop', 'temperature_rate', 'pressure_rate']
+
 
 def _find_equipment(name):
     return request.env['predictive.safety.pipeline'].sudo().search([('name', '=', name)], limit=1)
@@ -57,6 +61,8 @@ class PredictiveSafetyController(http.Controller):
             'design_pressure': equipment.design_pressure,
             'flow_limit': equipment.flow_limit,
             'pipe_length': equipment.pipe_length,
+            'fluid_density': equipment.fluid_density,
+            'fluid_viscosity': equipment.fluid_viscosity,
         })
 
     @http.route('/api/live_pressure/<string:equipment_name>', type='http', auth='public', methods=['GET'], csrf=False)
@@ -151,3 +157,35 @@ class PredictiveSafetyController(http.Controller):
             'status': equipment.current_status,
             'valve_command': equipment.valve_state,
         })
+
+    @http.route('/api/engineering_results/<string:location>', type='http', auth='public', methods=['POST'], csrf=False)
+    def post_engineering_results(self, location, **kwargs):
+        """MATLAB's computed results for one pipe, as a plain JSON body (not
+        JSON-RPC): any of velocity (m/s), reynolds_number, friction_factor,
+        pressure_drop (Pa), temperature_rate (K/s), pressure_rate (Pa/s).
+        A missing or null value (e.g. no rate on the first reading) keeps the
+        previous one. Errors return 400/404 so MATLAB's webwrite throws."""
+        equipment = _find_equipment(location)
+        if not equipment:
+            return _not_found(location)
+
+        try:
+            payload = json.loads(request.httprequest.get_data() or b'{}')
+        except ValueError:
+            return _json_response({'error': 'Body must be JSON'}, status=400)
+        if not isinstance(payload, dict):
+            return _json_response({'error': 'Body must be a JSON object'}, status=400)
+
+        values = {}
+        for key in ENGINEERING_RESULTS:
+            value = payload.get(key)
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return _json_response({'error': f'{key} must be a number, got {value!r}'}, status=400)
+            values[key] = float(value)
+        if not values:
+            return _json_response({'error': f'No results given - expected any of {", ".join(ENGINEERING_RESULTS)}'}, status=400)
+
+        equipment.write(values)
+        return _json_response({'ok': True, 'location': equipment.name, 'updated': sorted(values)})
