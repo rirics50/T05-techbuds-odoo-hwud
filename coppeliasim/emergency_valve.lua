@@ -20,7 +20,8 @@ function sysCall_init()
 
     -- Per-location baselines/ranges (F, PSI, gpm). column_bottom runs hottest
     -- (upstream of bottoms_output), column_top runs cooler than distillate_output
-    -- (upstream of the condenser). All 5 share boilUpRate
+    -- (upstream of the condenser). All 5 share boilUpRate, so demo_spike drives
+    -- every location toward its own limit at once
     locations = {
         feed_pipeline = {
             valve = feedValve,
@@ -69,7 +70,12 @@ function sysCall_actuation()
         sim.setJointPosition(loc.valve, loc.shutDown and 1.57 or 0.0)
     end
 
-    if t - lastUpdateTime >= updateInterval then
+    -- Shared spike, consumed once, same as the single-pipe version
+    local spikeRequested = sim.getFloatSignal('demo_spike')
+    if spikeRequested and spikeRequested > 0.5 then
+        sim.clearFloatSignal('demo_spike')
+        boilUpTarget = 1.0
+    elseif t - lastUpdateTime >= updateInterval then
         lastUpdateTime = t
         boilUpTarget = math.max(0, math.min(1,
             boilUpTarget + (math.random() * 0.3 - 0.15)))

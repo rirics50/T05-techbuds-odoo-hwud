@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import Empty
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 
 # The 5 monitored locations - fixed names, matching coppeliasim/emergency_valve.lua
@@ -58,6 +59,15 @@ def odoo_get(path):
 class CoppeliaBridge(Node):
     def __init__(self):
         super().__init__('coppelia_bridge')
+
+        # Demo trigger: publish std_msgs/Empty on /demo_spike to fire the shared
+        # boil-up spike in CoppeliaSim (see emergency_valve.lua)
+        self.spike_subscription = self.create_subscription(
+            Empty,
+            '/demo_spike',
+            self.demo_spike_callback,
+            10
+        )
 
         # Connect to CoppeliaSim ZMQ remote API on the Mac host
         self.get_logger().info('Connecting to CoppeliaSim on macOS host...')
@@ -188,6 +198,22 @@ class CoppeliaBridge(Node):
                 'is playing, and the ZMQ remote API is reachable on host.docker.internal:23000.'
             )
             self.warned_stale = True
+
+    def demo_spike_callback(self, msg):
+        # The spike is one shared boil-up upset for the whole column, so it only
+        # fires from a fully open state: if ANY location's valve is closed, the
+        # whole spike is refused until Manual Reset in Odoo reopens everything
+        try:
+            closed = [l for l in LOCATIONS
+                      if (self.sim.getFloatSignal(f'{l}_valve_shutdown') or 0.0) > 0.5]
+            if closed:
+                self.get_logger().warn(
+                    f'DEMO SPIKE ignored: valve closed at {", ".join(closed)} - Manual Reset in Odoo first.')
+                return
+            self.sim.setFloatSignal('demo_spike', 1.0)
+            self.get_logger().warn('DEMO SPIKE triggered: boil-up spike across all locations.')
+        except Exception as e:
+            self.get_logger().error(f'Failed to trigger demo spike in simulation: {e}')
 
 def main(args=None):
     rclpy.init(args=args)
