@@ -12,8 +12,8 @@ function result = check_temperature(reading, temperature_safety_limit_c, previou
 %                                 timestamp   (seconds, needed for dT/dt)
 %                                 valve_position (0-100 %, optional)
 %   previous_reading            optional; pass [] or omit on the first reading.
-%   opts                        optional struct overriding these defaults:
-%     margin_fraction          0.9, keep the same as check_pressure
+%   opts                        optional struct overriding safety_defaults.m:
+%     margin_fraction          shared with check_pressure (one place to tune both)
 %     adjust_valve_command     shared with check_pressure
 %     temp_rate_limit_K_per_s  *** PLACEHOLDER, NEEDS CONFIRMATION *** (Noel + Riya).
 %                              The Overlay gives no temperature rate threshold.
@@ -115,9 +115,7 @@ end
 
 function opts = apply_defaults(opts)
 % Fill any option the caller didn't set from the shared defaults.
-    defaults = struct('margin_fraction', 0.9, ...
-                      'temp_rate_limit_K_per_s', 0.5, ...
-                      'adjust_valve_command', 50);
+    defaults = safety_defaults();
     names = fieldnames(defaults);
     for k = 1:numel(names)
         if ~isfield(opts, names{k})

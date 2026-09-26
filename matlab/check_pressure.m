@@ -11,7 +11,8 @@ function result = check_pressure(reading, pressure_safety_limit_bar, previous_re
 %                                 valve_position (0-100 %, optional)
 %   previous_reading            optional; pass [] or omit on the first reading.
 %                               Without it the rate-of-change check is skipped.
-%   opts                        optional struct overriding these defaults:
+%   opts                        optional struct overriding the defaults, which live
+%                               in safety_defaults.m (shared with check_temperature):
 %     margin_fraction          0.9    AT_RISK starts at this fraction of the limit.
 %     rate_limit_Pa_per_s      5000   *** PLACEHOLDER, NEEDS CONFIRMATION ***
 %                                     (Noel + Riya). Overlay section 17 defines
@@ -120,9 +121,7 @@ end
 
 function opts = apply_defaults(opts)
 % Fill any option the caller didn't set. Local function: visible only in this file.
-    defaults = struct('margin_fraction', 0.9, ...
-                      'rate_limit_Pa_per_s', 5000, ...
-                      'adjust_valve_command', 50);
+    defaults = safety_defaults();   % shared with check_temperature
     names = fieldnames(defaults);
     for k = 1:numel(names)
         if ~isfield(opts, names{k})
