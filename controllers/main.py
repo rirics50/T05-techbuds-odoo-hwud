@@ -139,3 +139,15 @@ class PredictiveSafetyController(http.Controller):
         pipes = request.env['predictive.safety.pipeline'].sudo().search([('name', 'in', LOCATIONS)])
         by_name = {p.name: p for p in pipes}
         return _json_response([_live_reading(by_name[name]) for name in LOCATIONS if name in by_name])
+
+    @http.route('/api/valve_commands/<string:equipment_name>', type='http', auth='public', methods=['GET'], csrf=False)
+    def get_valve_commands(self, equipment_name, **kwargs):
+        """Latched status and valve command for one pipe, polled by ros_bridge.py"""
+        equipment = _find_equipment(equipment_name)
+        if not equipment:
+            return _not_found(equipment_name)
+        return _json_response({
+            'name': equipment.name,
+            'status': equipment.current_status,
+            'valve_command': equipment.valve_state,
+        })
