@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_predictive_safety_pipeline_tree" model="ir.ui.view">
+        <field name="name">predictive.safety.pipeline.tree</field>
+        <field name="model">predictive.safety.pipeline</field>
+        <field name="arch" type="xml">
+            <list string="Pipeline Equipment">
+                <field name="name"/>
+                <field name="material"/>
+                <field name="grade"/>
+                <field name="diameter"/>
+                <field name="thickness"/>
+                <field name="current_status"/>
+                <field name="valve_state"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_predictive_safety_pipeline_form" model="ir.ui.view">
+        <field name="name">predictive.safety.pipeline.form</field>
+        <field name="model">predictive.safety.pipeline</field>
+        <field name="arch" type="xml">
+            <form string="Pipeline Equipment">
+                <sheet>
+                    <field name="image" widget="image" class="oe_avatar"/>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="material"/>
+                            <field name="grade"/>
+                            <field name="current_status" widget="badge"
+                                   decoration-danger="current_status == 'critical'"
+                                   decoration-warning="current_status == 'warning'"
+                                   decoration-success="current_status == 'safe'"/>
+                            <field name="valve_state" widget="badge"
+                                   decoration-danger="valve_state == 'closed'"
+                                   decoration-success="valve_state == 'open'"/>
+                        </group>
+                        <group>
+                            <field name="diameter"/>
+                            <field name="thickness"/>
+                            <field name="corrosion_allowance"/>
+                            <field name="design_temperature"/>
+                            <field name="design_pressure"/>
+                            <field name="flow_limit"/>
+                            <field name="pipe_length"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_predictive_safety_pipeline" model="ir.actions.act_window">
+        <field name="name">Pipeline Specifications</field>
+        <field name="res_model">predictive.safety.pipeline</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem id="menu_predictive_safety_root" name="Predictive Safety" sequence="10"/>
+    <menuitem id="menu_pipeline_specs" name="Pipelines" parent="menu_predictive_safety_root" action="action_predictive_safety_pipeline" sequence="10"/>
+</odoo>
