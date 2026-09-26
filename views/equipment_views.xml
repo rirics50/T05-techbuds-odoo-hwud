@@ -22,6 +22,13 @@
         <field name="model">predictive.safety.pipeline</field>
         <field name="arch" type="xml">
             <form string="Pipeline Equipment">
+                <header>
+                    <button name="force_shutdown" type="object" string="Force Shutdown"
+                            class="btn-danger" confirm="Manually trigger emergency shutdown?"/>
+                    <button name="reset_to_safe" type="object" string="Manual Reset"
+                            class="btn-primary" invisible="current_status != 'critical'"
+                            confirm="Confirm maintenance is complete and resume operations?"/>
+                </header>
                 <sheet>
                     <field name="image" widget="image" class="oe_avatar"/>
                     <group>

@@ -216,3 +216,18 @@ class PipelineEquipment(models.Model):
             client.close()
         except Exception as e:
             raise UserError(f"Could not reach ROS to send override command: {e}")
+
+    def force_shutdown(self):
+        self.ensure_one()
+        self._publish_manual_override(1.0)
+        previous = self.current_status
+        self.current_status = 'critical'
+        self.valve_state = 'closed'
+        if previous != 'critical':
+            self._trigger_emergency_response(pressure=None)
+
+    def reset_to_safe(self):
+        self.ensure_one()
+        self._publish_manual_override(-1.0)
+        self.current_status = 'safe'
+        self.valve_state = 'open'
