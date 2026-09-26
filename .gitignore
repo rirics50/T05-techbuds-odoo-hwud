@@ -1,0 +1,43 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.Python
+*.log
+
+# --- ROS 2 ---
+build/
+install/
+log/
+devel/
+
+# --- MATLAB ---
+*.asv
+*.m~
+slprj/
+*.autosave
+
+# --- CoppeliaSim ---
+*.ttt~
+*.ttm~
+
+# --- Odoo ---
+*.pyc
+__manifest__.py.bak
+odoo.conf
+filestore/
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# --- Env / secrets ---
+.env
+*.pem
+*.key
