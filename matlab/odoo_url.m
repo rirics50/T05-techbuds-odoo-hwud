@@ -7,6 +7,7 @@ function url = odoo_url(cfg, endpoint, location)
 %   Named endpoints (one Odoo record per location, addressed by location name):
 %     'equipment'       /api/equipment/<location>       (limits and pipe spec, GET)
 %     'safety_status'   /api/safety_status/<location>
+%     'engineering_results'  /api/engineering_results/<location>   (POST; format ASSUMED, see to_engineering_payload)
 %     'live_readings'   /api/live_readings/<location>
 %     'valve_commands'  /api/valve_commands/<location>
 %   An unknown name is an error rather than a guessed URL: a typo would
@@ -16,7 +17,7 @@ function url = odoo_url(cfg, endpoint, location)
 %   valve_commands is polled by Riya's bridge, not by MATLAB; it is listed only
 %   so the name is a known one.
 
-    known = {'equipment', 'safety_status', 'live_readings', 'valve_commands'};
+    known = {'equipment', 'safety_status', 'engineering_results', 'live_readings', 'valve_commands'};
 
     if nargin < 3
         % Plain path form; tolerates a missing or doubled slash.

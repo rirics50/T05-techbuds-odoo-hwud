@@ -57,6 +57,13 @@ function s = default_settings()
     % PLACEHOLDER value.
     s.max_fetch_failures = 3;
 
+    % Also POST the flow hydraulics (velocity, Reynolds number, friction factor, pressure
+    % drop) to /api/engineering_results/<location> every cycle. OFF by default: Riya's
+    % endpoint is not in her repo yet, so the body format is an ASSUMPTION (see
+    % to_engineering_payload). Only takes effect when a real sender is in use
+    % (send_http = true, or a send_fn).
+    s.send_engineering = false;
+
     % Frozen data guard: if the bridge dies, Odoo keeps returning the LAST values
     % with an unchanged timestamp, which would look SAFE forever. When a
     % location's timestamp is identical for this many consecutive polls it counts

@@ -12,6 +12,7 @@ function [entries, state] = poll_cycle(cfg, settings, state)
 %   entries   1 x N struct array, one per location, with fields
 %             location, status, odoo_status, action, valve_command, reason,
 %             shutdown_signal, url, sent, send_msg, skipped, error,
+%             eng_sent, eng_msg (engineering-results POST, when enabled),
 %             and, for display only (they never affect a decision):
 %             poll_time_s, raw (as fetched), reading (adapted, SI), limits (used)
 %
@@ -127,6 +128,20 @@ function [e, state] = process_location(e, loc, cfg, settings, state, now_s, send
     e.sent     = logical(ok);
     e.send_msg = msg;
 
+    % Optional second POST. It runs AFTER the safety verdict has been sent, and any
+    % failure in it is caught here so it can never blank or delay-fail the verdict.
+    if settings.send_engineering
+        try
+            eng_url = odoo_url(cfg, 'engineering_results', loc);
+            [eng_ok, eng_msg] = send_fn(eng_url, to_engineering_payload(result));
+            e.eng_sent = logical(eng_ok);
+            e.eng_msg  = eng_msg;
+        catch eng_err
+            e.eng_sent = false;
+            e.eng_msg  = ['engineering send failed: ' eng_err.message];
+        end
+    end
+
     % Store the reading even if the send failed: the NEXT cycle's rate check
     % needs it. Not stored when the data was synthetic (fetch failed).
     if fetched
@@ -173,8 +188,14 @@ function [ok, msg] = post_to_odoo(url, payload, timeout_s)
 % UNVERIFIED against a live endpoint: /api/safety_status is declared
 % type='jsonrpc' in controllers/main.py, which expects a JSON-RPC 2.0 envelope
 % with the fields inside "params". Check the first real response.
-    body = struct('jsonrpc', '2.0', 'method', 'call', 'id', 1, ...
-                  'params', struct('status', payload.status, 'reason', payload.reason));
+    % Safety verdicts send only status + reason (shutdown_signal is for our own logs).
+    % Any other payload (the engineering results) is sent as-is.
+    if isfield(payload, 'status')
+        params = struct('status', payload.status, 'reason', payload.reason);
+    else
+        params = payload;
+    end
+    body = struct('jsonrpc', '2.0', 'method', 'call', 'id', 1, 'params', params);
     options = weboptions('MediaType', 'application/json', ...
                          'RequestMethod', 'post', 'Timeout', timeout_s);
     ok = false;
@@ -208,6 +229,6 @@ function e = blank_entry(loc)
     e = struct('location', loc, 'status', '', 'odoo_status', '', 'action', '', ...
                'valve_command', NaN, 'reason', '', 'shutdown_signal', NaN, ...
                'url', '', 'sent', false, 'send_msg', '', ...
-               'skipped', false, 'error', '', ...
+               'skipped', false, 'error', '', 'eng_sent', false, 'eng_msg', '', ...
                'poll_time_s', NaN, 'raw', [], 'reading', [], 'limits', []);
 end
