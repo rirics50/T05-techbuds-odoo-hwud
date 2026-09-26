@@ -4,7 +4,7 @@
         <field name="name">predictive.safety.pipeline.tree</field>
         <field name="model">predictive.safety.pipeline</field>
         <field name="arch" type="xml">
-            <list string="Pipeline Equipment">
+            <list string="Pipeline Equipment" class="o_predictive_safety">
                 <field name="name"/>
                 <field name="material"/>
                 <field name="grade"/>
@@ -21,7 +21,7 @@
         <field name="name">predictive.safety.pipeline.form</field>
         <field name="model">predictive.safety.pipeline</field>
         <field name="arch" type="xml">
-            <form string="Pipeline Equipment">
+            <form string="Pipeline Equipment" class="o_predictive_safety">
                 <header>
                     <button name="force_shutdown" type="object" string="Force Shutdown"
                             class="btn-danger" confirm="Manually trigger emergency shutdown?"/>

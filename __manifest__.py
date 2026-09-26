@@ -8,6 +8,11 @@
         'security/ir.model.access.csv',
         'views/equipment_views.xml',
     ],
+    'assets': {
+        'web.assets_backend': [
+            'predictive_safety/static/src/scss/predictive_safety.scss',
+        ],
+    },
     'installable': True,
     'application': True,
 }

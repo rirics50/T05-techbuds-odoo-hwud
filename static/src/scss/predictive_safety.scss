@@ -1,0 +1,121 @@
+/* =========================================================
+   Predictive Safety — Industrial Control Panel Theme
+   Scoped to .o_predictive_safety views only, so it never
+   bleeds into other Odoo apps (Real Estate, core backend, etc.)
+   ========================================================= */
+
+/* Semicolons in the URL are encoded as %3B on purpose: Odoo's asset bundler
+   cuts @import rules at the first ';', which splits a raw Google Fonts URL. */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400%3B500%3B600%3B700&family=IBM+Plex+Mono:wght@400%3B500%3B600&display=swap');
+
+:root {
+  --ps-graphite: #1C2128;
+  --ps-steel: #2B4C6F;
+  --ps-steel-light: #3E6D9C;
+  --ps-amber: #E8A33D;
+  --ps-red: #C23B3B;
+  --ps-green: #2E8B57;
+  --ps-bg: #F5F6F7;
+  --ps-border: #D7DBE0;
+}
+
+.o_predictive_safety {
+  font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+  background: var(--ps-bg);
+}
+
+.o_predictive_safety .oe_title h1,
+.o_predictive_safety h1,
+.o_predictive_safety h2 {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  color: var(--ps-graphite);
+  letter-spacing: -0.01em;
+}
+
+.o_predictive_safety .btn-danger {
+  background: var(--ps-red);
+  border-color: var(--ps-red);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 3px;
+  box-shadow: none;
+}
+.o_predictive_safety .btn-danger:hover {
+  background: #a53131;
+  border-color: #a53131;
+}
+
+.o_predictive_safety .btn-primary {
+  background: var(--ps-steel);
+  border-color: var(--ps-steel);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 3px;
+  box-shadow: none;
+}
+.o_predictive_safety .btn-primary:hover {
+  background: var(--ps-steel-light);
+  border-color: var(--ps-steel-light);
+}
+
+.o_predictive_safety .o_field_widget[name="last_pressure"] .o_field_float,
+.o_predictive_safety .o_field_widget[name="last_pressure"] input,
+.o_predictive_safety .o_field_widget[name="last_pressure"] span {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--ps-graphite);
+  letter-spacing: 0.02em;
+}
+
+.o_predictive_safety .o_field_widget[name="current_status"] .badge,
+.o_predictive_safety .o_field_widget[name="valve_state"] .badge {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  padding: 5px 14px;
+  border-radius: 3px;
+  border: none;
+}
+
+.o_predictive_safety .badge.text-bg-danger,
+.o_predictive_safety .badge.bg-danger {
+  background: var(--ps-red) !important;
+  animation: ps-pulse 1.8s ease-in-out infinite;
+}
+
+.o_predictive_safety .badge.text-bg-warning,
+.o_predictive_safety .badge.bg-warning {
+  background: var(--ps-amber) !important;
+  color: var(--ps-graphite) !important;
+}
+
+.o_predictive_safety .badge.text-bg-success,
+.o_predictive_safety .badge.bg-success {
+  background: var(--ps-green) !important;
+}
+
+@keyframes ps-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+
+.o_predictive_safety .o_field_widget[name="reading_ids"] td,
+.o_predictive_safety .o_field_widget[name="pressure_chart"] {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+}
+
+.o_predictive_safety .o_form_sheet {
+  border-top: 3px solid var(--ps-steel);
+}
+
+.o_predictive_safety .oe_kanban_card {
+  border-radius: 3px;
+  border: 1px solid var(--ps-border);
+  box-shadow: none;
+}
