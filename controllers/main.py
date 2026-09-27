@@ -160,15 +160,15 @@ class PredictiveSafetyController(http.Controller):
 
     @http.route('/api/engineering_results/<string:location>', type='http', auth='public', methods=['POST'], csrf=False)
     def post_engineering_results(self, location, **kwargs):
-        """MATLAB's computed results for one pipe, as a plain JSON body (not
-        JSON-RPC): any of velocity (m/s), reynolds_number, friction_factor,
-        pressure_drop (Pa), temperature_rate (K/s), pressure_rate (Pa/s).
-        A missing or null value (e.g. no rate on the first reading) keeps the
-        previous one. Errors return 400/404 so MATLAB's webwrite throws."""
-        equipment = _find_equipment(location)
-        if not equipment:
-            return _not_found(location)
+        """MATLAB's computed results for one pipe: any of velocity (m/s),
+        reynolds_number, friction_factor, pressure_drop (Pa),
+        temperature_rate (K/s), pressure_rate (Pa/s). A missing or null value
+        (e.g. no rate on the first reading) keeps the previous one.
 
+        Accepts either a plain JSON body ({"velocity": ...}; errors are
+        400/404) or a JSON-RPC 2.0 envelope ({"jsonrpc": "2.0", "params":
+        {"velocity": ...}}), which gets a JSON-RPC reply: HTTP 200 with
+        result.ok, or result.error, as the MATLAB poller reads it."""
         try:
             payload = json.loads(request.httprequest.get_data() or b'{}')
         except ValueError:
@@ -176,16 +176,30 @@ class PredictiveSafetyController(http.Controller):
         if not isinstance(payload, dict):
             return _json_response({'error': 'Body must be a JSON object'}, status=400)
 
+        rpc = payload.get('jsonrpc') == '2.0' and isinstance(payload.get('params'), dict)
+        rpc_id = payload.get('id')
+        if rpc:
+            payload = payload['params']
+
+        def reply(data, status=200):
+            if rpc:
+                return _json_response({'jsonrpc': '2.0', 'id': rpc_id, 'result': data})
+            return _json_response(data, status=status)
+
+        equipment = _find_equipment(location)
+        if not equipment:
+            return reply({'error': f'No equipment found with name "{location}"'}, status=404)
+
         values = {}
         for key in ENGINEERING_RESULTS:
             value = payload.get(key)
             if value is None:
                 continue
             if isinstance(value, bool) or not isinstance(value, (int, float)):
-                return _json_response({'error': f'{key} must be a number, got {value!r}'}, status=400)
+                return reply({'error': f'{key} must be a number, got {value!r}'}, status=400)
             values[key] = float(value)
         if not values:
-            return _json_response({'error': f'No results given - expected any of {", ".join(ENGINEERING_RESULTS)}'}, status=400)
+            return reply({'error': f'No results given - expected any of {", ".join(ENGINEERING_RESULTS)}'}, status=400)
 
         equipment.write(values)
-        return _json_response({'ok': True, 'location': equipment.name, 'updated': sorted(values)})
+        return reply({'ok': True, 'location': equipment.name, 'updated': sorted(values)})
