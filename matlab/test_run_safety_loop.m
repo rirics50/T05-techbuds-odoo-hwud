@@ -170,13 +170,13 @@ stamped = make_world(locs, struct('pressure_psi', 30, 'temperature_F', 100, ...
                                   'flow_gpm', 2, 'timestamp', '2026-09-25T18:00:00+00:00'));
 world('raw') = stamped;
 state = [];
-for n = 1:5                                             % same stamp 5 polls in a row
+for n = 1:18                                            % same stamp 18 polls in a row (max_stale_polls)
     clk('now') = 3000 + n;
     [e, state] = poll_cycle(cfg, settings, state);
-    assert(all(strcmp({e.odoo_status}, 'safe')));       % up to max_stale_polls (5) still fine
+    assert(all(strcmp({e.odoo_status}, 'safe')));       % up to max_stale_polls (18) still fine
 end
-clk('now') = 3006;
-[e, state] = poll_cycle(cfg, settings, state);          % 6th: stale, failure 1 of 3
+clk('now') = 3019;
+[e, state] = poll_cycle(cfg, settings, state);          % 19th: stale, failure 1 of 3
 assert(all([e.skipped]) & has(e(1).error, 'unchanged'));
 [e, state] = poll_cycle(cfg, settings, state);          % failure 2
 assert(all([e.skipped]));
@@ -186,7 +186,7 @@ assert(has(e(1).reason, 'No usable sensor data') & has(e(1).reason, 'unchanged')
 % a new timestamp resets everything
 w = stamped;
 for k = 1:numel(locs)
-    w.(locs{k}).timestamp = '2026-09-25T18:00:07+00:00';
+    w.(locs{k}).timestamp = '2026-09-25T18:00:20+00:00';
 end
 world('raw') = w;
 [e, state] = poll_cycle(cfg, settings, state);

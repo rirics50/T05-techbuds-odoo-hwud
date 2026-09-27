@@ -69,8 +69,19 @@ function s = default_settings()
     % location's timestamp is identical for this many consecutive polls it counts
     % as a failed fetch (and after max_fetch_failures of those, CRITICAL).
     % Counted in polls, not seconds, so it doesn't depend on MATLAB's and Odoo's
-    % clocks agreeing. PLACEHOLDER; the bridge posts about once a second.
-    s.max_stale_polls = 5;
+    % clocks agreeing.
+    %
+    % 18 (was 5, then briefly 7): Riya found 7 tripped a false CRITICAL from an
+    % ordinary network hiccup on her (currently sequential) bridge - one stalled
+    % HTTP call to one pipe delays the whole cycle, which isn't a real fault.
+    % 18 is comfortably above that kind of stall while keeping total time-to-
+    % CRITICAL bounded: at the default 1 s poll interval, a genuinely frozen
+    % reading still fails safe within max_stale_polls + max_fetch_failures - 1
+    % = 20 polls (~20 s) - well inside a demo's timescale. We're keeping the
+    % fail-safe-to-CRITICAL principle (not downgrading staleness to WARNING);
+    % this only gives it more tolerance. Riya is separately fixing the bridge to
+    % poll pipes in parallel so one stall can't cascade into the others.
+    s.max_stale_polls = 18;
 
     % Injection points (function handles; [] = use the default behaviour).
     % TODO(fetch_fn): still a stub. Blocked on Riya confirming whether
