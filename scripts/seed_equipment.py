@@ -35,11 +35,11 @@ PIPE_SPEC = {
 # and the API: design pressure (PSI), design temperature (F), flow limit
 # (kg/s) and pipe length (m)
 LOCATIONS = {
-    'feed_pipeline':     {'design_pressure': 35.0, 'design_temperature': 105.0, 'flow_limit': 0.18, 'pipe_length': 25.0},
-    'column_bottom':     {'design_pressure': 58.0, 'design_temperature': 200.0, 'flow_limit': 0.20, 'pipe_length': 5.0},
-    'column_top':        {'design_pressure': 48.0, 'design_temperature': 163.0, 'flow_limit': 0.19, 'pipe_length': 8.0},
-    'bottoms_output':    {'design_pressure': 57.0, 'design_temperature': 195.0, 'flow_limit': 0.20, 'pipe_length': 20.0},
-    'distillate_output': {'design_pressure': 50.0, 'design_temperature': 165.0, 'flow_limit': 0.19, 'pipe_length': 30.0},
+    'feed_pipeline':     {'design_pressure': 37.0, 'design_temperature': 105.0, 'flow_limit': 0.18, 'pipe_length': 25.0},
+    'column_bottom':     {'design_pressure': 58.0, 'design_temperature': 190.0, 'flow_limit': 0.20, 'pipe_length': 5.0},
+    'column_top':        {'design_pressure': 48.0, 'design_temperature': 152.0, 'flow_limit': 0.19, 'pipe_length': 8.0},
+    'bottoms_output':    {'design_pressure': 57.0, 'design_temperature': 184.0, 'flow_limit': 0.20, 'pipe_length': 20.0},
+    'distillate_output': {'design_pressure': 50.0, 'design_temperature': 156.0, 'flow_limit': 0.19, 'pipe_length': 30.0},
 }
 
 
