@@ -21,7 +21,7 @@ function sysCall_init()
     -- Per-location baselines/ranges (F, PSI, gpm). column_bottom runs hottest
     -- (upstream of bottoms_output), column_top runs cooler than distillate_output
     -- (upstream of the condenser). All 5 share boilUpRate, so demo_spike drives
-    -- every location toward its own limit at once
+    -- every location toward its own limit at once; idle stays near baseline
     locations = {
         feed_pipeline = {
             valve = feedValve,
@@ -57,11 +57,24 @@ function sysCall_init()
 
     updateInterval = 20  -- seconds
     lastUpdateTime = 0
+
+    -- Idle boil-up wanders only inside [0, idleMax], so idle readings stay
+    -- clear of every pipe's AT_RISK margin (0.9 x design limit). Only
+    -- demo_spike goes above it: full boil-up for spikeHold seconds, then a
+    -- steady decay back into the idle band
+    idleMax = 0.10
+    idleStep = 0.05        -- max change per updateInterval while idle
+    spikeHold = 30         -- seconds held at full boil-up
+    spikeDecayRate = 0.05  -- boil-up per second on the way back down
+    spikeEndTime = nil
+    lastStepTime = nil
     math.randomseed(os.time())
 end
 
 function sysCall_actuation()
     local t = sim.getSystemTime()
+    local dt = lastStepTime and (t - lastStepTime) or 0
+    lastStepTime = t
 
     -- Each valve moves only on its own location's shutdown signal
     for name, loc in pairs(locations) do
@@ -75,10 +88,17 @@ function sysCall_actuation()
     if spikeRequested and spikeRequested > 0.5 then
         sim.clearFloatSignal('demo_spike')
         boilUpTarget = 1.0
+        spikeEndTime = t + spikeHold
+    elseif spikeEndTime and t < spikeEndTime then
+        -- hold the spike at full boil-up
+    elseif boilUpTarget > idleMax then
+        -- spike over (or starting above the band): decay back to idle
+        boilUpTarget = math.max(idleMax, boilUpTarget - spikeDecayRate * dt)
+        spikeEndTime = nil
     elseif t - lastUpdateTime >= updateInterval then
         lastUpdateTime = t
-        boilUpTarget = math.max(0, math.min(1,
-            boilUpTarget + (math.random() * 0.3 - 0.15)))
+        boilUpTarget = math.max(0, math.min(idleMax,
+            boilUpTarget + (math.random() * 2 - 1) * idleStep))
     end
 
     boilUpRate = boilUpRate + (boilUpTarget - boilUpRate) * 0.3
