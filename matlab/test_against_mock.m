@@ -10,7 +10,9 @@
 %   3  CRITICAL latches, SAFE/WARNING are refused, reset un-latches
 %      then a real simulated spike end to end
 %   4  engineering results POST: velocity, Reynolds, friction factor, pressure drop,
-%      temperature_rate, pressure_rate - PLAIN JSON (not JSON-RPC), confirmed by Riya
+%      temperature_rate, pressure_rate - JSON-RPC, same path as safety_status
+%      (confirmed live 10/10 by Riya, 2026-09-27; the mock also accepts plain JSON
+%      as a fallback, matching the real endpoint, but MATLAB never sends that)
 %   2  the mock is STOPPED mid-run; the loop must skip/fail safe, not crash
 % Step 2 goes last because it shuts the mock down. Restart the mock to run again.
 % Takes about a minute. Any failed assert stops the script with the line number.
@@ -127,23 +129,24 @@ webread([base '/mock/reset/all'], opt);
 pause(14);                                                           % let the spike finish
 
 % ============================ STEP 4: engineering results ============================
-fprintf('STEP 4: engineering results (plain JSON, confirmed by Riya - not JSON-RPC)\n');
+fprintf('STEP 4: engineering results (JSON-RPC, same path as safety_status - confirmed live by Riya)\n');
 s4 = settings;  s4.locations = {'feed_pipeline'};  s4.send_engineering = true;
 fl = settings.pipe_geometry_by_location.feed_pipeline;
 fl.fluid_density = 1000;  fl.fluid_viscosity = 1e-3;
 
 % Cycle 1: no previous reading yet -> hydraulics real, both rates null.
-% WRONG-WIRE-FORMAT CANARY: if post_to_odoo still JSON-RPC-wrapped this payload, the mock
-% would receive {jsonrpc,method,id,params} at the top level, find no "velocity" etc. there,
-% and reply with an error - eng_sent would be false below, not this PASS.
 before = mstate();
 [e1, state4] = poll_cycle(cfg, s4);
-assert(e1(1).sent & e1(1).eng_sent, 'engineering POST failed (wrong wire format?): %s', e1(1).eng_msg);
+assert(e1(1).sent & e1(1).eng_sent, 'engineering POST failed: %s', e1(1).eng_msg);
 assert(strcmp(e1(1).eng_msg, 'posted'));
 after = mstate();
 assert(after.feed_pipeline.eng_posts_received == before.feed_pipeline.eng_posts_received + 1);
 assert(count(after, 'feed_pipeline') == count(before, 'feed_pipeline') + 1);   % the verdict was sent too
 got1 = after.feed_pipeline.last_eng;
+% REGRESSION GUARD: the mock accepts plain JSON too (matching Riya's real endpoint's
+% documented fallback), so a regression back to sending plain JSON would still get a
+% PASS above - this is the assertion that actually catches it.
+assert(got1.is_rpc, 'engineering_results must be sent JSON-RPC-wrapped, same as safety_status');
 ref1 = check_flow(e1(1).reading, settings.limits.feed_pipeline.flow_kg_s, fl);
 assert(abs(got1.velocity - ref1.velocity) < 1e-9 * abs(ref1.velocity));
 assert(abs(got1.reynolds_number - ref1.reynolds_number) < 1e-9 * ref1.reynolds_number);
