@@ -68,6 +68,15 @@ function sysCall_init()
     spikeDecayRate = 0.05  -- boil-up per second on the way back down
     spikeEndTime = nil
     lastStepTime = nil
+
+    -- A shut valve relieves its pipe: that location's readings ease back
+    -- toward baseline (time constant in seconds) instead of freezing at the
+    -- level they had when it closed, so a Manual Reset doesn't re-trip on
+    -- stale spike-level values
+    shutRelaxTau = 5
+    for _, loc in pairs(locations) do
+        loc.level = 0.0   -- boil-up level this location currently sees
+    end
     math.randomseed(os.time())
 end
 
@@ -104,20 +113,25 @@ function sysCall_actuation()
     boilUpRate = boilUpRate + (boilUpTarget - boilUpRate) * 0.3
 
     for name, loc in pairs(locations) do
-        if not loc.shutDown then
-            local temp = loc.baseTemp + boilUpRate * loc.tempRange + (math.random() * 2 - 1)
-
-            local pressureTarget = loc.basePress + boilUpRate * loc.pressRange
-            pressureSmoothed[name] = pressureSmoothed[name]
-                                       + (pressureTarget - pressureSmoothed[name]) * 0.15
-            local press = pressureSmoothed[name] + (math.random() * 1 - 0.5)
-
-            local flow = loc.baseFlow + boilUpRate * loc.flowRange + (math.random() * 0.6 - 0.3)
-
-            sim.setFloatSignal(name .. '_temperature', temp)
-            sim.setFloatSignal(name .. '_pressure', press)
-            sim.setFloatSignal(name .. '_flow_rate', flow)
+        if loc.shutDown then
+            -- valve shut: ease back toward baseline instead of holding
+            loc.level = loc.level - loc.level * math.min(1, dt / shutRelaxTau)
+        else
+            -- valve open: follow the shared boil-up rate immediately
+            loc.level = boilUpRate
         end
-        -- if shut down, signals simply hold at their last value
+
+        local temp = loc.baseTemp + loc.level * loc.tempRange + (math.random() * 2 - 1)
+
+        local pressureTarget = loc.basePress + loc.level * loc.pressRange
+        pressureSmoothed[name] = pressureSmoothed[name]
+                                   + (pressureTarget - pressureSmoothed[name]) * 0.15
+        local press = pressureSmoothed[name] + (math.random() * 1 - 0.5)
+
+        local flow = loc.baseFlow + loc.level * loc.flowRange + (math.random() * 0.6 - 0.3)
+
+        sim.setFloatSignal(name .. '_temperature', temp)
+        sim.setFloatSignal(name .. '_pressure', press)
+        sim.setFloatSignal(name .. '_flow_rate', flow)
     end
 end
