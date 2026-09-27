@@ -8,6 +8,9 @@ also fires the spike; this script only watches and does the reset.
 It waits up to 60 s for "DEMO SPIKE triggered" in the bridge log and takes
 that log stamp as t=0.
 
+Before firing it checks the scene is playing, all 5 pipes are SAFE with
+valves open, and MATLAB is posting (its engineering results are changing).
+
 Exit code: 0 pass, 1 fail, 2 aborted (not ready, or no spike arrived).
 
 Environment:
@@ -34,6 +37,9 @@ RESET_AT = float(os.environ.get('RESET_AT', 55))
 WATCH_UNTIL = float(os.environ.get('WATCH_UNTIL', 100))
 BRIDGE_LOG = '/root/ros_bridge.log'
 LOCATIONS = ['feed_pipeline', 'column_bottom', 'column_top', 'bottoms_output', 'distillate_output']
+MATLAB_RESULTS = ['velocity', 'reynolds_number', 'friction_factor',
+                  'pressure_drop', 'temperature_rate', 'pressure_rate']
+MATLAB_CHECK_SEC = 5
 
 
 def say(text=''):
@@ -77,7 +83,22 @@ not_ready = [loc for loc in LOCATIONS
 if not_ready:
     say(f'NOT READY - not SAFE/open: {", ".join(not_ready)}. Press Manual Reset on them in Odoo, then run again.')
     sys.exit(2)
-say('Pre-flight OK: all 5 pipes SAFE, all valves open.')
+
+
+# MATLAB must be running, or nothing will close the valves. It is the only
+# writer of the engineering results, which change on every poll while it runs
+def matlab_results():
+    return odoo('predictive.safety.pipeline', 'search_read', [('name', 'in', LOCATIONS)],
+                fields=MATLAB_RESULTS, order='name')
+
+
+before = matlab_results()
+time.sleep(MATLAB_CHECK_SEC)
+if matlab_results() == before:
+    say(f'NOT READY - MATLAB is not posting (no engineering results changed in {MATLAB_CHECK_SEC} s). '
+        'Start the MATLAB safety loop, then run again.')
+    sys.exit(2)
+say('Pre-flight OK: scene playing, all 5 pipes SAFE with valves open, MATLAB posting.')
 
 last_ticket = max(odoo('maintenance.request', 'search', []) or [0])
 log_start = os.path.getsize(BRIDGE_LOG)
