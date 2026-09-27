@@ -44,7 +44,8 @@ assert(all(strcmp({e.odoo_status}, 'safe')));
 
 % ============================ table rows ============================
 model = dashboard_update([], e, info0);
-assert(isequal(size(model.rows), [5 7]) & numel(model.columns) == 7);
+assert(isequal(size(model.rows), [5 8]) & numel(model.columns) == 8);
+assert(strcmp(model.columns{8}, 'Engineering'));
 assert(isequal(model.locations, locs));
 assert(strcmp(model.rows{1, 1}, 'SAFE'));
 assert(strcmp(model.rows{1, 2}, '100.0 F | 37.8 C'));
@@ -54,6 +55,37 @@ assert(strcmp(model.rows{1, 5}, '150.0 C | 10.00 bar | 10.000 kg/s'));
 assert(strcmp(model.rows{1, 6}, '0.0 s'));
 assert(strcmp(model.rows{1, 7}, 'All checks SAFE'));
 assert(isequal(model.row_colors(1, :), GREEN));
+
+% ---- Engineering column: shows exactly e.engineering (to_engineering_payload's own
+% numbers, computed by poll_cycle) formatted, never re-derived here ----
+numstr = @(fmt, x) fmt_or_na(fmt, x);
+eng1 = e(1).engineering;
+assert(isfinite(eng1.velocity) & eng1.velocity > 0 & isfinite(eng1.reynolds_number));
+assert(isnan(eng1.temperature_rate) & isnan(eng1.pressure_rate));   % no previous reading yet
+expected_eng1 = sprintf('v=%s m/s  Re=%s  f=%s  dP=%s Pa  |  dT/dt=%s K/s  dP/dt=%s Pa/s', ...
+    numstr('%.3f', eng1.velocity), numstr('%.0f', eng1.reynolds_number), ...
+    numstr('%.4f', eng1.friction_factor), numstr('%.1f', eng1.pressure_drop), ...
+    numstr('%.2f', eng1.temperature_rate), numstr('%.0f', eng1.pressure_rate));
+assert(strcmp(model.rows{1, 8}, expected_eng1));
+
+% a rate becomes a real (non-n/a) number on the second cycle, once there's a previous
+% reading with a LATER timestamp - Delta_t must be > 0 (same rule check_pressure /
+% check_temperature already enforce for "Delta_t = 0"; 'normal' below has a FIXED
+% timestamp string, so it alone would give Delta_t = 0 and a legitimately-NaN rate,
+% not a bug - hence the explicit later timestamp here)
+clk('now') = 1001;
+w2 = world('raw');
+for k = 1:numel(locs)
+    w2.(locs{k}).timestamp = '2026-09-25T18:00:01+00:00';
+end
+world('raw') = w2;
+[e2, state] = poll_cycle(cfg, settings, state);
+m2 = dashboard_update(model, e2, setfield(info0, 'now_s', 1001));
+eng2 = e2(1).engineering;
+assert(isfinite(eng2.temperature_rate) & isfinite(eng2.pressure_rate));
+assert(has(m2.rows{1, 8}, sprintf('dT/dt=%.2f K/s', eng2.temperature_rate)));
+assert(~has(m2.rows{1, 8}, 'dT/dt=n/a'));
+world('raw') = make_world(locs, normal);   % restore before the next section
 
 % ---- statuses and reasons come from the loop unchanged; colours follow status ----
 w = world('raw');
@@ -123,6 +155,9 @@ m = dashboard_update([], e, info0);
 assert(strcmp(m.rows{1, 1}, 'NO DATA') & isequal(m.row_colors(1, :), GRAY));
 assert(has(m.rows{1, 7}, 'fetch failed'));
 assert(strcmp(m.rows{1, 2}, 'n/a F | n/a C') & strcmp(m.rows{1, 6}, 'n/a'));
+% skipped -> e(1).engineering was never computed (blank_entry's []); shown as all n/a, no crash
+assert(isempty(e(1).engineering));
+assert(strcmp(m.rows{1, 8}, 'v=n/a m/s  Re=n/a  f=n/a  dP=n/a Pa  |  dT/dt=n/a K/s  dP/dt=n/a Pa/s'));
 assert(strcmp(m.rows{2, 1}, 'SAFE'));                       % the others are unaffected
 assert(isnan(m.series.feed_pipeline.pressure_bar(end)));    % gap in the line, no crash
 [e, sf] = poll_cycle(cfg, settings, sf);                    % failure 2
@@ -131,6 +166,10 @@ m = dashboard_update(m, e, info0);
 assert(strcmp(m.rows{1, 1}, 'CRITICAL') & isequal(m.row_colors(1, :), RED));
 assert(strcmp(m.rows{1, 3}, 'n/a PSI | n/a bar'));          % no reading, still a coherent row
 assert(has(m.rows{1, 7}, 'No usable sensor data'));
+% this path DOES reach to_engineering_payload (unlike skipped), but flow on an all-NaN
+% reading is itself all NaN, so the display still comes out all n/a - same result either way
+assert(~isempty(e(1).engineering) & isnan(e(1).engineering.velocity));
+assert(strcmp(m.rows{1, 8}, 'v=n/a m/s  Re=n/a  f=n/a  dP=n/a Pa  |  dT/dt=n/a K/s  dP/dt=n/a Pa/s'));
 world('fail') = {};
 
 % ============================ banner ============================
@@ -272,6 +311,16 @@ assert(calls('n') == 0);
 disp('All dashboard / limits-reload / loop-hook tests passed.');
 
 % ---------------- local helpers ----------------
+function s = fmt_or_na(fmt, x)
+% Mirrors dashboard_update's own private num() helper, so the Engineering-column
+% assertions build their expected string the same way the code under test does.
+    if isfinite(x)
+        s = sprintf(fmt, x);
+    else
+        s = 'n/a';
+    end
+end
+
 function w = make_world(locs, raw)
     for k = 1:numel(locs)
         w.(locs{k}) = raw;

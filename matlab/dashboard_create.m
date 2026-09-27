@@ -3,8 +3,11 @@ function h = dashboard_create(locations)
 %   h = dashboard_create(locations)
 %
 %   Layout (top to bottom): banner, status table (one row per location, colour
-%   coded), then a 3 x N grid of charts (temperature, pressure, flow; one column
-%   per location), each with its limit (red dashed) and AT_RISK band (amber dashed).
+%   coded, with an Engineering column showing velocity/Reynolds/friction factor/
+%   pressure drop/both rates - the same numbers to_engineering_payload sends to
+%   Odoo, computed every cycle regardless of send_engineering), then a 3 x N grid
+%   of charts (temperature, pressure, flow; one column per location), each with
+%   its limit (red dashed) and AT_RISK band (amber dashed).
 %
 %   Graphics only. NOT covered by the automated tests: it needs a display.
 %   Uses classic figure/uitable/axes so it works on older MATLAB versions too.
@@ -15,7 +18,7 @@ function h = dashboard_create(locations)
     labels    = {'Temperature (C)', 'Pressure (bar)', 'Flow (kg/s)'};
 
     h.fig = figure('Name', 'Chemical process safety: MATLAB engine', 'NumberTitle', 'off', ...
-                   'Position', [30 30 1650 950], 'Color', [0.96 0.96 0.96], ...
+                   'Position', [30 30 1950 950], 'Color', [0.96 0.96 0.96], ...
                    'MenuBar', 'none', 'ToolBar', 'none');
 
     h.banner = uicontrol(h.fig, 'Style', 'text', 'Units', 'normalized', ...
@@ -23,10 +26,14 @@ function h = dashboard_create(locations)
                          'FontWeight', 'bold', 'HorizontalAlignment', 'left', ...
                          'String', 'Starting...');
 
-    cols = {'Status', 'Temperature', 'Pressure', 'Flow', 'Limits (T | P | flow)', 'Age', 'Reason'};
+    % Must match dashboard_update's model.columns exactly (order and count): that
+    % function builds each row, this only declares the headers/widths once.
+    cols = {'Status', 'Temperature', 'Pressure', 'Flow', 'Limits (T | P | flow)', ...
+            'Age', 'Reason', 'Engineering'};
     h.table = uitable(h.fig, 'Units', 'normalized', 'Position', [0.01 0.60 0.98 0.30], ...
                       'ColumnName', cols, 'RowName', locations, 'FontSize', 11, ...
-                      'ColumnWidth', {90, 150, 150, 160, 260, 60, 620}, ...
+                      'ColumnWidth', {90, 150, 150, 160, 260, 60, 420, 460}, ...
+                      'ForegroundColor', [0.05 0.05 0.05], ...   % near-black text, legible on all 4 row colors
                       'Data', repmat({''}, n, numel(cols)));
 
     % chart grid: rows = metrics, columns = locations
@@ -38,7 +45,8 @@ function h = dashboard_create(locations)
                       'FontSize', 8, 'Box', 'on');
             hold(ax, 'on');
             grid(ax, 'on');
-            title(ax, sprintf('%s: %s', strrep(locations{c}, '_', ' '), labels{r}), 'FontSize', 9);
+            title(ax, sprintf('%s: %s', strrep(locations{c}, '_', ' '), labels{r}), ...
+                  'FontSize', 9, 'FontWeight', 'bold', 'Color', [0 0 0]);   % solid black, not the default washed-out gray
             h.ax(r, c)    = ax;
             h.line(r, c)  = plot(ax, NaN, NaN, '-', 'Color', [0.10 0.35 0.75], 'LineWidth', 1.6);
             h.limit(r, c) = plot(ax, [0 1], [NaN NaN], '--', 'Color', [0.80 0.10 0.10], 'LineWidth', 1.2);

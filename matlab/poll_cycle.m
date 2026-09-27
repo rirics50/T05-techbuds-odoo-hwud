@@ -14,7 +14,8 @@ function [entries, state] = poll_cycle(cfg, settings, state)
 %             shutdown_signal, url, sent, send_msg, skipped, error,
 %             eng_sent, eng_msg (engineering-results POST, when enabled),
 %             and, for display only (they never affect a decision):
-%             poll_time_s, raw (as fetched), reading (adapted, SI), limits (used)
+%             poll_time_s, raw (as fetched), reading (adapted, SI), limits (used),
+%             engineering (to_engineering_payload(result), always computed)
 %
 %   One location failing (fetch error, bad config, a bug) never stops the
 %   others: its error is recorded in entries(k).error and the loop moves on.
@@ -110,6 +111,11 @@ function [e, state] = process_location(e, loc, cfg, settings, state, now_s, send
 
     result  = combine_checks(reading, settings.limits.(loc), pp, prev, settings.opts);
     payload = to_odoo_payload(result);
+
+    % Display-only: computed every cycle regardless of send_engineering, using the
+    % SAME function the real POST uses, so the dashboard can never show numbers that
+    % differ from what actually gets (or would get) sent to Odoo.
+    e.engineering = to_engineering_payload(result);
 
     if ~fetched
         % Say WHY it is CRITICAL: the bare reason would only say "invalid reading"
@@ -235,5 +241,5 @@ function e = blank_entry(loc)
                'valve_command', NaN, 'reason', '', 'shutdown_signal', NaN, ...
                'url', '', 'sent', false, 'send_msg', '', ...
                'skipped', false, 'error', '', 'eng_sent', false, 'eng_msg', '', ...
-               'poll_time_s', NaN, 'raw', [], 'reading', [], 'limits', []);
+               'poll_time_s', NaN, 'raw', [], 'reading', [], 'limits', [], 'engineering', []);
 end

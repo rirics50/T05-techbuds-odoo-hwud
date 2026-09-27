@@ -23,7 +23,7 @@ function model = dashboard_update(model, entries, info)
     if isempty(model)
         model = struct();
         model.columns = {'Status', 'Temperature', 'Pressure', 'Flow', ...
-                         'Limits (T | P | flow)', 'Age', 'Reason'};
+                         'Limits (T | P | flow)', 'Age', 'Reason', 'Engineering'};
         model.max_points = 120;        % about 2 minutes at a 1 s poll
         model.t0 = NaN;
         model.last_ts = struct();
@@ -112,6 +112,21 @@ function model = dashboard_update(model, entries, info)
             age_text = [age_text ' s'];
         end
 
+        % ---- engineering results, exactly what would be (or was) POSTed to Odoo:
+        % e.engineering is set by poll_cycle from to_engineering_payload(result), the
+        % SAME function used for the real send, so this can never drift from what
+        % actually goes out. Shown regardless of send_engineering, since it's
+        % computed every cycle anyway. 'n/a' per value when there is no reading. ----
+        eng = e.engineering;
+        if isempty(eng)
+            eng = struct('velocity', NaN, 'reynolds_number', NaN, 'friction_factor', NaN, ...
+                         'pressure_drop', NaN, 'temperature_rate', NaN, 'pressure_rate', NaN);
+        end
+        engstr = sprintf('v=%s m/s  Re=%s  f=%s  dP=%s Pa  |  dT/dt=%s K/s  dP/dt=%s Pa/s', ...
+                         num('%.3f', eng.velocity), num('%.0f', eng.reynolds_number), ...
+                         num('%.4f', eng.friction_factor), num('%.1f', eng.pressure_drop), ...
+                         num('%.2f', eng.temperature_rate), num('%.0f', eng.pressure_rate));
+
         model.rows(k, :) = { ...
             st, ...
             sprintf('%s F | %s C', num('%.1f', T_f), num('%.1f', T_c)), ...
@@ -119,7 +134,8 @@ function model = dashboard_update(model, entries, info)
             sprintf('%s gpm | %s kg/s', num('%.2f', F_gpm), num('%.3f', F_kgs)), ...
             limstr, ...
             age_text, ...
-            reason};
+            reason, ...
+            engstr};
         model.row_colors(k, :) = color;
 
         % ---- history (NaN keeps a gap in the line when there is no reading) ----
