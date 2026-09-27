@@ -42,12 +42,14 @@ The repo root is the `predictive_safety` Odoo module itself (clone it into a fol
 ├── coppeliasim/          # 3D scene + Lua script (the /Distillation_Column child script)
 ├── check_db.py           # Helper: lists Odoo databases
 ├── scripts/              # seed_equipment.py: creates/updates the 5 pipe records and their limits
+│                         #   run_joint_test.sh: one end-to-end safety-loop test, PASS/FAIL
 ├── matlab/               # check_pressure.m: SAFE / AT_RISK / CRITICAL pressure check, with test_check_pressure.m
 └── docs/                 # (planned) Architecture diagrams, notes
 ```
 
 `ros_bridge.py` reads `ODOO_URL` from the environment (default `http://192.168.65.254:8069`, Docker Desktop's IPv4 address for the host).
 `scripts/seed_equipment.py` loads the 5 pipe records with their limits: `ODOO_PASSWORD=... python scripts/seed_equipment.py`.
+`scripts/run_joint_test.sh` runs one full safety-loop test: it fires the demo spike, checks all 5 valves close, does a Manual Reset at 55 s and watches for re-trips until 100 s: `ODOO_PASSWORD=... scripts/run_joint_test.sh`. Needs Odoo, the playing scene, the bridge container and the MATLAB loop running, with all 5 pipes SAFE.
 
 ## API
 Each of the 5 monitored pipes is its own Odoo equipment record, named exactly:
