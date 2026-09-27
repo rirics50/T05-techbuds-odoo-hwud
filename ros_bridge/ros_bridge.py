@@ -85,8 +85,12 @@ class CoppeliaBridge(Node):
         self.desired_commands = {}
         self.applied_commands = {}
 
-        # Watchdog state: tracks the last time we got a real reading
-        self.last_good_reading_time = time.time()
+        # Watchdog state: when each location's values last changed. A stopped
+        # scene clears its signals and a paused or hung one freezes them;
+        # either way self.latest keeps the old reading, so it can't be the test
+        self.started = time.time()
+        self.last_values = {}
+        self.last_new_reading = {}
         self.warned_stale = False
 
         self.timer = self.create_timer(POLL_SEC, self.timer_callback)
@@ -110,6 +114,9 @@ class CoppeliaBridge(Node):
                 flow = self.sim.getFloatSignal(f'{location}_flow_rate')
                 if None in (temperature, pressure, flow):
                     continue
+                if (temperature, pressure, flow) != self.last_values.get(location):
+                    self.last_values[location] = (temperature, pressure, flow)
+                    self.last_new_reading[location] = time.time()
                 shutdown = self.sim.getFloatSignal(f'{location}_valve_shutdown')
                 reading = {
                     'location': location,
@@ -123,13 +130,6 @@ class CoppeliaBridge(Node):
                     self.latest[location] = reading
 
             self.apply_valve_commands()
-
-            if len(self.latest) == len(LOCATIONS):
-                # Got a good reading - reset the watchdog
-                self.last_good_reading_time = time.time()
-                if self.warned_stale:
-                    self.get_logger().info('>>> RECOVERED: all location signals are flowing again.')
-                    self.warned_stale = False
         except Exception as e:
             self.get_logger().error(f'Failed to read location signals: {e}')
 
@@ -184,15 +184,19 @@ class CoppeliaBridge(Node):
                 self.get_logger().error(f'Failed to set {location}_valve_shutdown in simulation: {e}')
 
     def watchdog_callback(self):
-        elapsed = time.time() - self.last_good_reading_time
-        if elapsed > STALE_THRESHOLD_SEC and not self.warned_stale:
-            missing = [l for l in LOCATIONS if l not in self.latest]
+        now = time.time()
+        stale = [l for l in LOCATIONS
+                 if now - self.last_new_reading.get(l, self.started) > STALE_THRESHOLD_SEC]
+        if stale and not self.warned_stale:
             self.get_logger().error(
-                f'>>> NOT WORKING: no complete reading for all locations in {elapsed:.1f}s '
-                f'(never seen: {missing or "none"}). Check that CoppeliaSim is running, the scene '
-                'is playing, and the ZMQ remote API is reachable on host.docker.internal:23000.'
+                f'>>> NOT WORKING: no new reading in over {STALE_THRESHOLD_SEC:.0f}s for {", ".join(stale)}. '
+                'Check that CoppeliaSim is running, the scene is playing (not stopped or paused), '
+                'and the ZMQ remote API is reachable on host.docker.internal:23000.'
             )
             self.warned_stale = True
+        elif not stale and self.warned_stale:
+            self.get_logger().info('>>> RECOVERED: all location signals are flowing again.')
+            self.warned_stale = False
 
     def demo_spike_callback(self, msg):
         # The spike is one shared boil-up upset for the whole column, so it only
