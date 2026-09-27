@@ -27,8 +27,9 @@ function [reading, fluid] = adapt_reading(raw, poll_time_s)
 %
 %   Pure function: no input(), no I/O.
 
-    % ---- PLACEHOLDER: confirm real fluid properties with Riya before judging ----
-    % Water at ~20 C. Every flow_rate and Reynolds number depends on these.
+    % Water at ~20 C. CONFIRMED live in Odoo by Riya (2026-09-27) as the fixed
+    % fluid properties for all locations, matching what we already used here.
+    % Every flow_rate and Reynolds number depends on these.
     FLUID_DENSITY   = 1000;     % kg/m^3
     FLUID_VISCOSITY = 0.001;    % Pa*s
 

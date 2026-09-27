@@ -18,7 +18,9 @@ function result = check_temperature(reading, temperature_safety_limit_c, previou
 %     temp_rate_limit_K_per_s  *** PLACEHOLDER, NEEDS CONFIRMATION *** (Noel + Riya).
 %                              The Overlay gives no temperature rate threshold.
 %
-%   result   struct: location, status, action, valve_command, reason
+%   result   struct: location, status, action, valve_command, reason,
+%            rate_K_per_s (dT/dt; NaN when it could not be computed). Informational
+%            only, same as check_pressure's rate_Pa_per_s.
 %
 %   Pure function: no input(), no I/O, so it runs headless from any transport.
 
@@ -47,12 +49,14 @@ function result = check_temperature(reading, temperature_safety_limit_c, previou
         result.action        = 'SHUTDOWN';
         result.valve_command = 0;
         result.reason        = 'Invalid temperature reading or limit; failing safe';
+        result.rate_K_per_s  = NaN;
         return
     end
 
     % ---- Rate of change: dT/dt = (Tnew - Told) / Delta_t  [K/s] ----
     rate_tripped = false;
     rate_note    = '';
+    rate_value   = NaN;   % exposed in the result even when it doesn't trip AT_RISK
     if isstruct(previous_reading)
         has_fields = isfield(previous_reading, 'temperature') & ...
                      isfield(previous_reading, 'timestamp') & ...
@@ -64,6 +68,7 @@ function result = check_temperature(reading, temperature_safety_limit_c, previou
             % out-of-order data. Either way skip the rate check, don't guess.
             if isscalar(dt) & isfinite(dt) & dt > 0 & isscalar(T_old) & isfinite(T_old)
                 dTdt = (T_K - T_old) / dt;
+                rate_value = dTdt;   % expose it regardless of whether it trips
                 % Only a RISING rate is an overheating risk (signed compare),
                 % so fast cooling doesn't trip it.
                 if dTdt >= opts.temp_rate_limit_K_per_s
@@ -115,6 +120,7 @@ function result = check_temperature(reading, temperature_safety_limit_c, previou
         result.reason = sprintf('Temperature %.2f C below margin of limit %.2f C%s', ...
                                 reading.temperature, temperature_safety_limit_c, rate_note);
     end
+    result.rate_K_per_s = rate_value;
 end
 
 function opts = apply_defaults(opts)

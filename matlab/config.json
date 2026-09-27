@@ -1,4 +1,4 @@
 {
-  "odoo_base_url": "http://192.168.1.242:8069",
-  "rosbridge_url": "ws://192.168.1.242:9090"
+  "odoo_base_url": "http://192.168.0.130:8069",
+  "rosbridge_url": "ws://192.168.0.130:9090"
 }

@@ -185,20 +185,26 @@ end
 function [ok, msg] = post_to_odoo(url, payload, timeout_s)
 % The ONLY function that touches the network. Only reachable via send_http = true.
 %
-% UNVERIFIED against a live endpoint: /api/safety_status is declared
-% type='jsonrpc' in controllers/main.py, which expects a JSON-RPC 2.0 envelope
-% with the fields inside "params". Check the first real response.
-    % Safety verdicts send only status + reason (shutdown_signal is for our own logs).
-    % Any other payload (the engineering results) is sent as-is.
-    if isfield(payload, 'status')
-        params = struct('status', payload.status, 'reason', payload.reason);
-    else
-        params = payload;
-    end
-    body = struct('jsonrpc', '2.0', 'method', 'call', 'id', 1, 'params', params);
+% Two different wire formats, distinguished by 'status' being in the payload
+% (only to_odoo_payload's safety verdict has it; to_engineering_payload never does):
+%   safety_status:         JSON-RPC 2.0 envelope, fields inside "params" (confirmed
+%                           by controllers/main.py's type='jsonrpc'; not yet exercised
+%                           against a live response, only the mock so far).
+%   engineering_results:    PLAIN JSON, the fields at the top level, no envelope
+%                           (CONFIRMED by Riya, 2026-09-27 - do not JSON-RPC-wrap this one).
     options = weboptions('MediaType', 'application/json', ...
                          'RequestMethod', 'post', 'Timeout', timeout_s);
     ok = false;
+    is_verdict = isfield(payload, 'status');
+
+    if is_verdict
+        % Safety verdicts send only status + reason (shutdown_signal is for our own logs).
+        body = struct('jsonrpc', '2.0', 'method', 'call', 'id', 1, ...
+                      'params', struct('status', payload.status, 'reason', payload.reason));
+    else
+        body = payload;   % plain JSON: sent exactly as built by to_engineering_payload
+    end
+
     try
         resp = webwrite(url, body, options);   % struct is encoded with jsonencode
     catch err
@@ -206,22 +212,35 @@ function [ok, msg] = post_to_odoo(url, payload, timeout_s)
         return
     end
 
-    if isstruct(resp) & isfield(resp, 'error')
-        msg = 'JSON-RPC error from Odoo';
-    elseif isstruct(resp) & isfield(resp, 'result')
-        res = resp.result;
-        if isstruct(res) & isfield(res, 'error')
-            % e.g. "latched CRITICAL - Manual Reset required": Odoo received it
-            % but refused to apply it
-            msg = res.error;
-        elseif isstruct(res) & isfield(res, 'ok')
-            ok  = logical(res.ok);
-            msg = 'posted';
+    if is_verdict
+        if isstruct(resp) & isfield(resp, 'error')
+            msg = 'JSON-RPC error from Odoo';
+        elseif isstruct(resp) & isfield(resp, 'result')
+            res = resp.result;
+            if isstruct(res) & isfield(res, 'error')
+                % e.g. "latched CRITICAL - Manual Reset required": Odoo received it
+                % but refused to apply it
+                msg = res.error;
+            elseif isstruct(res) & isfield(res, 'ok')
+                ok  = logical(res.ok);
+                msg = 'posted';
+            else
+                msg = 'unexpected result from Odoo';
+            end
         else
-            msg = 'unexpected result from Odoo';
+            msg = 'unexpected response from Odoo';
         end
     else
-        msg = 'unexpected response from Odoo';
+        % Plain response expected directly at the top level: {"ok": true, ...}
+        % or {"error": "..."} - no "result" wrapper here.
+        if isstruct(resp) & isfield(resp, 'error')
+            msg = num2str(resp.error);
+        elseif isstruct(resp) & isfield(resp, 'ok')
+            ok  = logical(resp.ok);
+            msg = 'posted';
+        else
+            msg = 'unexpected response from Odoo';
+        end
     end
 end
 

@@ -7,34 +7,61 @@ has = @(s, sub) ~isempty(strfind(s, sub));
 
 limits = struct('pressure_bar', 10, 'temperature_c', 150, 'flow_kg_s', 10);
 pp = struct('pipe_diameter', 0.1524, 'pipe_length', 5, 'fluid_density', 1000, 'fluid_viscosity', 1e-3);
-mk = @(P, T, F) struct('location', 'feed_pipeline', 'pressure', P, 'temperature', T, ...
-                       'flow_rate', F, 'timestamp', 0);
+mk = @(P, T, F, t) struct('location', 'feed_pipeline', 'pressure', P, 'temperature', T, ...
+                          'flow_rate', F, 'timestamp', t);
+
+FIELDS6 = {'velocity'; 'reynolds_number'; 'friction_factor'; 'pressure_drop'; ...
+          'temperature_rate'; 'pressure_rate'};
 
 % ============================ the payload ============================
-r = combine_checks(mk(3, 80, 0.5), limits, pp);
+r = combine_checks(mk(3, 80, 0.5, 0), limits, pp);
 p = to_engineering_payload(r);
-assert(isequal(fieldnames(p), {'velocity'; 'reynolds_number'; 'friction_factor'; 'pressure_drop'}));
-f = r.checks.flow;                      % the payload IS the flow check's own numbers
+assert(isequal(fieldnames(p), FIELDS6));
+f = r.checks.flow;                      % the hydraulics are the flow check's own numbers
 assert(p.velocity == f.velocity & p.reynolds_number == f.reynolds_number);
 assert(p.friction_factor == f.friction_factor & p.pressure_drop == f.pressure_drop);
-assert(all(structfun(@isfinite, p)) & all(structfun(@(x) x > 0, p)));
+assert(isfinite(p.velocity) & isfinite(p.reynolds_number) & p.velocity > 0 & p.reynolds_number > 0);
 
 % independent recomputation (laminar/turbulent formulas from first principles)
 A = pi * 0.1524^2 / 4;  v = 0.5 / 1000 / A;  Re = 1000 * v * 0.1524 / 1e-3;
 assert(abs(p.velocity - v) < 1e-12 & abs(p.reynolds_number - Re) < 1e-6 * Re);
 
-% it carries the numbers even when the location is CRITICAL (they are informational)
-r = combine_checks(mk(12, 80, 0.5), limits, pp);
+% no previous_reading -> both rates NaN (nothing to compute a rate from)
+assert(isnan(p.temperature_rate) & isnan(p.pressure_rate));
+
+% ---- rates: sourced from check_pressure/check_temperature's own rate_*_per_s, not recomputed ----
+r = combine_checks(mk(3.4, 84, 0.5, 1), limits, pp, mk(3.0, 80, 0.5, 0));
+p = to_engineering_payload(r);
+assert(p.pressure_rate == r.checks.pressure.rate_Pa_per_s);       % same value the check returned
+assert(p.temperature_rate == r.checks.temperature.rate_K_per_s);
+assert(abs(p.pressure_rate - 0.4e5) < 1e-6);                      % (3.4-3.0) bar / 1 s, in Pa/s
+assert(abs(p.temperature_rate - 4) < 1e-9);                       % (84-80) C / 1 s, in K/s (deg C step = K step)
+% units need no conversion: Odoo's engineering_results wants exactly Pa/s and K/s
+assert(strcmp(class(p.pressure_rate), 'double') & strcmp(class(p.temperature_rate), 'double'));
+
+% a fast FALL is a real (negative) rate here, unlike the AT_RISK trip which is one-sided
+r = combine_checks(mk(3.0, 80, 0.5, 1), limits, pp, mk(3.4, 84, 0.5, 0));
+p = to_engineering_payload(r);
+assert(p.pressure_rate < 0 & p.temperature_rate < 0);
+assert(strcmp(r.status, 'SAFE'));                                 % the fall itself never trips AT_RISK
+
+% Delta_t = 0 (skipped rate check) -> NaN rate, not a crash
+r = combine_checks(mk(3.4, 84, 0.5, 5), limits, pp, mk(3.0, 80, 0.5, 5));
+p = to_engineering_payload(r);
+assert(isnan(p.pressure_rate) & isnan(p.temperature_rate));
+
+% it carries the hydraulics even when the location is CRITICAL (they are informational)
+r = combine_checks(mk(12, 80, 0.5, 0), limits, pp);
 assert(strcmp(r.status, 'CRITICAL'));
 assert(isfinite(to_engineering_payload(r).reynolds_number));
 
-% bad pipe parameters -> NaN values, no error (they would go out as JSON null)
-r = combine_checks(mk(3, 80, 0.5), limits, []);
+% bad pipe parameters -> hydraulics NaN, no error (they would go out as JSON null)
+r = combine_checks(mk(3, 80, 0.5, 0), limits, []);
 p = to_engineering_payload(r);
 assert(all(structfun(@isnan, p)));
 
 % it must NOT look like a safety verdict: post_to_odoo decides how to encode by the 'status' field
-assert(~isfield(to_engineering_payload(combine_checks(mk(3, 80, 0.5), limits, pp)), 'status'));
+assert(~isfield(to_engineering_payload(combine_checks(mk(3, 80, 0.5, 0), limits, pp)), 'status'));
 
 % ============================ URL ============================
 assert(strcmp(odoo_url(cfg, 'engineering_results', 'column_top'), ...
@@ -68,8 +95,11 @@ for k = 1:5
     b = rec(sprintf('%d', 2 * k));       % 2nd, 4th ...     = engineering
     assert(has(a.url, ['/api/safety_status/' locs{k}]) & isfield(a.payload, 'status'));
     assert(has(b.url, ['/api/engineering_results/' locs{k}]) & ~isfield(b.payload, 'status'));
-    assert(isequal(fieldnames(b.payload), {'velocity'; 'reynolds_number'; 'friction_factor'; 'pressure_drop'}));
-    assert(all(structfun(@isfinite, b.payload)));
+    assert(isequal(fieldnames(b.payload), FIELDS6));
+    % hydraulics are finite (a real reading with pipe_geometry); rates are NaN on
+    % cycle 1 of this test (no previous_reading yet) - both are expected, not a bug
+    assert(isfinite(b.payload.velocity) & isfinite(b.payload.reynolds_number));
+    assert(isnan(b.payload.temperature_rate) & isnan(b.payload.pressure_rate));
 end
 
 % a CRITICAL location still sends its engineering results, after the verdict

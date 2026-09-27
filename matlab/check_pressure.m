@@ -22,7 +22,11 @@ function result = check_pressure(reading, pressure_safety_limit_bar, previous_re
 %                                     0.2 bar/s is tuned to the scene's sensor noise, not an engineering value (see safety_defaults.m).
 %     adjust_valve_command     50     PLACEHOLDER valve % for AT_RISK/ADJUST_VALVE.
 %
-%   result   struct: location, status, action, valve_command, reason
+%   result   struct: location, status, action, valve_command, reason,
+%            rate_Pa_per_s (dP/dt; NaN when it could not be computed, e.g. no
+%            previous_reading, or a non-positive/non-finite Delta_t). Informational
+%            only (e.g. for the engineering-results payload) - it never changes the
+%            status by itself; only the >= comparison against rate_limit_Pa_per_s does.
 %
 %   Pure function: no input(), no I/O, so it runs headless from any transport.
 
@@ -52,12 +56,14 @@ function result = check_pressure(reading, pressure_safety_limit_bar, previous_re
         result.action        = 'SHUTDOWN';
         result.valve_command = 0;
         result.reason        = 'Invalid pressure reading or limit; failing safe';
+        result.rate_Pa_per_s = NaN;
         return
     end
 
     % ---- Rate of change: dP/dt = (Pnew - Pold) / Delta_t  [Pa/s] ----
     rate_tripped = false;
     rate_note    = '';
+    rate_value   = NaN;   % exposed in the result even when it doesn't trip AT_RISK
     if isstruct(previous_reading)
         has_fields = isfield(previous_reading, 'pressure') & ...
                      isfield(previous_reading, 'timestamp') & ...
@@ -70,6 +76,7 @@ function result = check_pressure(reading, pressure_safety_limit_bar, previous_re
             % meaningless. In both cases skip the rate check, don't guess.
             if isscalar(dt) & isfinite(dt) & dt > 0 & isscalar(P_old) & isfinite(P_old)
                 dPdt = (P_Pa - P_old) / dt;
+                rate_value = dPdt;   % expose it regardless of whether it trips
                 % Only a RISING rate is dangerous; fast depressurising is not
                 % an overpressure risk, so compare the signed value.
                 if dPdt >= opts.rate_limit_Pa_per_s
@@ -117,6 +124,7 @@ function result = check_pressure(reading, pressure_safety_limit_bar, previous_re
         result.reason = sprintf('Pressure %.3f bar below margin of limit %.3f bar%s', ...
                                 reading.pressure, pressure_safety_limit_bar, rate_note);
     end
+    result.rate_Pa_per_s = rate_value;
 end
 
 function opts = apply_defaults(opts)

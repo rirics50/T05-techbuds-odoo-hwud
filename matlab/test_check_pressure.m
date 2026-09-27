@@ -27,6 +27,7 @@ assert(strcmp(r.status, 'CRITICAL') & r.valve_command == 0);
 % NaN sensor value -> fail safe
 r = check_pressure(mk(NaN, 0), limit);
 assert(strcmp(r.status, 'CRITICAL') & r.valve_command == 0);
+assert(isnan(r.rate_Pa_per_s));   % the bad-input path also sets rate_Pa_per_s, not just NaN by omission
 
 % Location passes through untouched
 assert(strcmp(r.location, 'column_bottom'));
@@ -48,6 +49,12 @@ assert(strcmp(r.status, 'SAFE'));
 r = check_pressure(mk(3.4, 1), limit, mk(3.0, 0));
 assert(strcmp(r.status, 'AT_RISK') & strcmp(r.action, 'ADJUST_VALVE'));
 assert(~isempty(strfind(r.reason, 'dP/dt')));
+% rate_Pa_per_s is exposed (for the engineering-results payload), not just used internally
+assert(abs(r.rate_Pa_per_s - 40000) < 1e-6);
+
+% a fast FALL is a real (negative) rate here too, even though it never trips AT_RISK
+r = check_pressure(mk(3.0, 1), limit, mk(3.4, 0));
+assert(strcmp(r.status, 'SAFE') & abs(r.rate_Pa_per_s - (-40000)) < 1e-6);
 
 % Worst-case sensor noise (+/-0.5 PSI -> consecutive samples 1 PSI = 6895 Pa apart,
 % 6895 Pa/s at a 1 s poll) must NOT trip: this is why the threshold is 20000

@@ -37,12 +37,16 @@ assert(strcmp(r.status, 'CRITICAL') & r.valve_command == 0);
 % NaN sensor value -> fail safe
 r = check_temperature(mk(NaN, 0), limit);
 assert(strcmp(r.status, 'CRITICAL') & strcmp(r.action, 'SHUTDOWN') & r.valve_command == 0);
+assert(isnan(r.rate_K_per_s));   % the bad-input path also sets rate_K_per_s, not just NaN by omission
 
 % Location passes through untouched
 assert(strcmp(r.location, 'column_bottom'));
 
-% Output has exactly the five contract fields
-assert(isequal(sort(fieldnames(r)), sort({'location';'status';'action';'valve_command';'reason'})));
+% Output has the five contract fields, plus rate_K_per_s (informational; NaN here,
+% since this call had no previous_reading to compute a rate from)
+assert(isequal(sort(fieldnames(r)), ...
+               sort({'location';'status';'action';'valve_command';'reason';'rate_K_per_s'})));
+assert(isnan(r.rate_K_per_s));
 
 % ---- Rate of change (placeholder 3 K/s) ----
 
@@ -50,6 +54,12 @@ assert(isequal(sort(fieldnames(r)), sort({'location';'status';'action';'valve_co
 r = check_temperature(mk(84, 1), limit, mk(80, 0));
 assert(strcmp(r.status, 'AT_RISK') & strcmp(r.action, 'ADJUST_VALVE'));
 assert(~isempty(strfind(r.reason, 'dT/dt')));
+% rate_K_per_s is exposed (for the engineering-results payload), not just used internally
+assert(abs(r.rate_K_per_s - 4) < 1e-9);
+
+% a fast FALL is a real (negative) rate here too, even though it never trips AT_RISK
+r = check_temperature(mk(80, 1), limit, mk(84, 0));
+assert(strcmp(r.status, 'SAFE') & abs(r.rate_K_per_s - (-4)) < 1e-9);
 
 % Worst-case sensor noise (+/-1 F -> consecutive samples 2 F = 1.11 K apart,
 % 1.11 K/s at a 1 s poll) must NOT trip: this is why the threshold is 3

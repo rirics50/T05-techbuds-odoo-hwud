@@ -9,7 +9,8 @@
 %   1  POST for feed_pipeline only, then all five      (real webwrite + JSON-RPC envelope)
 %   3  CRITICAL latches, SAFE/WARNING are refused, reset un-latches
 %      then a real simulated spike end to end
-%   4  engineering results POST (velocity, Reynolds, friction factor, pressure drop)
+%   4  engineering results POST: velocity, Reynolds, friction factor, pressure drop,
+%      temperature_rate, pressure_rate - PLAIN JSON (not JSON-RPC), confirmed by Riya
 %   2  the mock is STOPPED mid-run; the loop must skip/fail safe, not crash
 % Step 2 goes last because it shuts the mock down. Restart the mock to run again.
 % Takes about a minute. Any failed assert stops the script with the line number.
@@ -126,26 +127,47 @@ webread([base '/mock/reset/all'], opt);
 pause(14);                                                           % let the spike finish
 
 % ============================ STEP 4: engineering results ============================
-fprintf('STEP 4: engineering results\n');
+fprintf('STEP 4: engineering results (plain JSON, confirmed by Riya - not JSON-RPC)\n');
 s4 = settings;  s4.locations = {'feed_pipeline'};  s4.send_engineering = true;
+fl = settings.pipe_geometry_by_location.feed_pipeline;
+fl.fluid_density = 1000;  fl.fluid_viscosity = 1e-3;
+
+% Cycle 1: no previous reading yet -> hydraulics real, both rates null.
+% WRONG-WIRE-FORMAT CANARY: if post_to_odoo still JSON-RPC-wrapped this payload, the mock
+% would receive {jsonrpc,method,id,params} at the top level, find no "velocity" etc. there,
+% and reply with an error - eng_sent would be false below, not this PASS.
 before = mstate();
-[e, ~] = poll_cycle(cfg, s4);
-assert(e(1).sent & e(1).eng_sent, 'engineering POST failed: %s', e(1).eng_msg);
-assert(strcmp(e(1).eng_msg, 'posted'));
+[e1, state4] = poll_cycle(cfg, s4);
+assert(e1(1).sent & e1(1).eng_sent, 'engineering POST failed (wrong wire format?): %s', e1(1).eng_msg);
+assert(strcmp(e1(1).eng_msg, 'posted'));
 after = mstate();
 assert(after.feed_pipeline.eng_posts_received == before.feed_pipeline.eng_posts_received + 1);
 assert(count(after, 'feed_pipeline') == count(before, 'feed_pipeline') + 1);   % the verdict was sent too
-got = after.feed_pipeline.last_eng;
-% compare with the hydraulics computed locally from the same reading
-fl = settings.pipe_geometry_by_location.feed_pipeline;
-fl.fluid_density = 1000;  fl.fluid_viscosity = 1e-3;
-ref = check_flow(e(1).reading, settings.limits.feed_pipeline.flow_kg_s, fl);
-assert(abs(got.velocity - ref.velocity) < 1e-9 * abs(ref.velocity));
-assert(abs(got.reynolds_number - ref.reynolds_number) < 1e-9 * ref.reynolds_number);
-assert(abs(got.friction_factor - ref.friction_factor) < 1e-9);
-assert(abs(got.pressure_drop - ref.pressure_drop) < 1e-9 * max(1, abs(ref.pressure_drop)));
-fprintf('  PASS  mock received v=%.3f m/s, Re=%.0f, f=%.4f, dP=%.1f Pa (match local calc)\n', ...
-        got.velocity, got.reynolds_number, got.friction_factor, got.pressure_drop);
+got1 = after.feed_pipeline.last_eng;
+ref1 = check_flow(e1(1).reading, settings.limits.feed_pipeline.flow_kg_s, fl);
+assert(abs(got1.velocity - ref1.velocity) < 1e-9 * abs(ref1.velocity));
+assert(abs(got1.reynolds_number - ref1.reynolds_number) < 1e-9 * ref1.reynolds_number);
+assert(abs(got1.friction_factor - ref1.friction_factor) < 1e-9);
+assert(abs(got1.pressure_drop - ref1.pressure_drop) < 1e-9 * max(1, abs(ref1.pressure_drop)));
+% JSON null (what NaN becomes) decodes via webread as [] (empty double), not NaN
+assert(isempty(got1.temperature_rate) & isempty(got1.pressure_rate));
+fprintf('  PASS  cycle 1: v=%.3f m/s, Re=%.0f, f=%.4f, dP=%.1f Pa (match local calc), rates null (no previous reading)\n', ...
+        got1.velocity, got1.reynolds_number, got1.friction_factor, got1.pressure_drop);
+
+% Cycle 2: now there IS a previous reading, so both rates are real, non-NaN numbers -
+% and must match what check_pressure/check_temperature themselves compute (not a re-derivation).
+pause(1.1);
+[e2, ~] = poll_cycle(cfg, s4, state4);
+assert(e2(1).sent & e2(1).eng_sent, 'engineering POST failed: %s', e2(1).eng_msg);
+prev_reading = state4.prev.feed_pipeline;   % what poll_cycle stored after cycle 1
+ref_p = check_pressure(e2(1).reading, settings.limits.feed_pipeline.pressure_bar, prev_reading);
+ref_t = check_temperature(e2(1).reading, settings.limits.feed_pipeline.temperature_c, prev_reading);
+got2 = mstate().feed_pipeline.last_eng;
+assert(isfinite(got2.temperature_rate) & isfinite(got2.pressure_rate));
+assert(abs(got2.temperature_rate - ref_t.rate_K_per_s) < 1e-6);
+assert(abs(got2.pressure_rate - ref_p.rate_Pa_per_s) < 1e-3);
+fprintf('  PASS  cycle 2: dT/dt=%.4f K/s, dP/dt=%.1f Pa/s received as real numbers, match check_pressure/check_temperature\n', ...
+        got2.temperature_rate, got2.pressure_rate);
 
 % ============================ STEP 2: server stops mid-run ============================
 fprintf('STEP 2: stopping the mock mid-run (Odoo going away)\n');
