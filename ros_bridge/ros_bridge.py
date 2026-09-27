@@ -23,7 +23,9 @@ ODOO_URL = os.environ.get('ODOO_URL', 'http://192.168.65.254:8069')
 POLL_SEC = 0.1          # read all 15 signals every tick
 HTTP_CYCLE_SEC = 1.0    # post each location's latest reading and read its valve command this often
 STALE_THRESHOLD_SEC = 3.0  # if no good reading for this long, something's wrong
-HTTP_TIMEOUT_SEC = 2.0
+# Normal calls take ~10 ms; a Docker Desktop stall is cut off after 1 s (2 s
+# with the one retry) so a pipe's readings never go stale for long in Odoo
+HTTP_TIMEOUT_SEC = 1.0
 
 
 def fetch_json(req):
@@ -82,8 +84,6 @@ class CoppeliaBridge(Node):
         self.latest = {}
         self.desired_commands = {}
         self.applied_commands = {}
-        self.posts_ok = True
-        self.commands_ok = True
 
         # Watchdog state: tracks the last time we got a real reading
         self.last_good_reading_time = time.time()
@@ -93,10 +93,13 @@ class CoppeliaBridge(Node):
         # Separate, slower timer just to check the watchdog
         self.watchdog_timer = self.create_timer(1.0, self.watchdog_callback)
 
-        # Odoo calls run on their own thread, so a slow or failing Odoo can
-        # never stall signal polling or valve updates
-        self.http_thread = threading.Thread(target=self.http_loop, daemon=True)
-        self.http_thread.start()
+        # Odoo calls run on one thread per location, so a slow or failing call
+        # for one pipe never delays another pipe's updates, signal polling or
+        # valve updates
+        self.http_threads = [threading.Thread(target=self.location_loop, args=(location,), daemon=True)
+                             for location in LOCATIONS]
+        for thread in self.http_threads:
+            thread.start()
 
     def timer_callback(self):
         try:
@@ -130,46 +133,38 @@ class CoppeliaBridge(Node):
         except Exception as e:
             self.get_logger().error(f'Failed to read location signals: {e}')
 
-    def http_loop(self):
+    def location_loop(self, location):
+        # Every HTTP_CYCLE_SEC: post this pipe's latest reading, then read back
+        # its latched valve command (MATLAB verdicts, Force Shutdown, Manual
+        # Reset) for timer_callback to apply. Failures are logged once per outage
+        posts_ok = commands_ok = True
         while rclpy.ok():
             started = time.time()
-            self.post_readings()
-            self.fetch_valve_commands()
-            time.sleep(max(0.0, HTTP_CYCLE_SEC - (time.time() - started)))
-
-    def post_readings(self):
-        with self.lock:
-            readings = dict(self.latest)
-        failed = None
-        for location, payload in readings.items():
-            try:
-                odoo_jsonrpc(f'/api/live_readings/{location}', payload)
-            except Exception as e:
-                failed = f'{location}: {e}'
-        if failed and self.posts_ok:
-            self.get_logger().error(f'>>> NOT WORKING: failed to post readings to Odoo ({failed})')
-        elif not failed and not self.posts_ok:
-            self.get_logger().info('>>> RECOVERED: posting readings to Odoo again.')
-        self.posts_ok = not failed
-
-    def fetch_valve_commands(self):
-        # Odoo holds each pipe's latched valve command (MATLAB verdicts,
-        # Force Shutdown, Manual Reset); timer_callback applies them
-        failed = None
-        for location in LOCATIONS:
+            with self.lock:
+                payload = self.latest.get(location)
+            if payload is not None:
+                try:
+                    odoo_jsonrpc(f'/api/live_readings/{location}', payload)
+                    if not posts_ok:
+                        self.get_logger().info(f'>>> RECOVERED: posting {location} readings to Odoo again.')
+                    posts_ok = True
+                except Exception as e:
+                    if posts_ok:
+                        self.get_logger().error(f'>>> NOT WORKING: failed to post {location} reading to Odoo ({e})')
+                    posts_ok = False
             try:
                 command = odoo_get(f'/api/valve_commands/{location}').get('valve_command')
+                if command in ('open', 'closed'):
+                    with self.lock:
+                        self.desired_commands[location] = command
+                if not commands_ok:
+                    self.get_logger().info(f'>>> RECOVERED: reading {location} valve command from Odoo again.')
+                commands_ok = True
             except Exception as e:
-                failed = f'{location}: {e}'
-                continue
-            if command in ('open', 'closed'):
-                with self.lock:
-                    self.desired_commands[location] = command
-        if failed and self.commands_ok:
-            self.get_logger().error(f'Failed to read valve commands from Odoo ({failed})')
-        elif not failed and not self.commands_ok:
-            self.get_logger().info('>>> RECOVERED: reading valve commands from Odoo again.')
-        self.commands_ok = not failed
+                if commands_ok:
+                    self.get_logger().error(f'Failed to read {location} valve command from Odoo ({e})')
+                commands_ok = False
+            time.sleep(max(0.0, HTTP_CYCLE_SEC - (time.time() - started)))
 
     def apply_valve_commands(self):
         # Runs on the node's thread - the only one that talks to CoppeliaSim
