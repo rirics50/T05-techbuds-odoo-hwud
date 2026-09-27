@@ -44,8 +44,13 @@ assert(all(strcmp({e.odoo_status}, 'safe')));
 
 % ============================ table rows ============================
 model = dashboard_update([], e, info0);
-assert(isequal(size(model.rows), [5 8]) & numel(model.columns) == 8);
-assert(strcmp(model.columns{8}, 'Engineering'));
+assert(isequal(size(model.rows), [5 9]) & numel(model.columns) == 9);
+assert(strcmp(model.columns{8}, 'Engineering') & strcmp(model.columns{9}, 'Valve (Odoo)'));
+% 'normal' has no status/valve_state at all - must show n/a, not crash, and NOT
+% force the row red (nothing to indicate a latch when Odoo sent nothing)
+assert(strcmp(e(1).odoo_live_status, '') & strcmp(e(1).odoo_live_valve, ''));
+assert(strcmp(model.rows{1, 9}, 'n/a'));
+assert(isequal(model.row_colors(1, :), GREEN));
 assert(isequal(model.locations, locs));
 assert(strcmp(model.rows{1, 1}, 'SAFE'));
 assert(strcmp(model.rows{1, 2}, '100.0 F | 37.8 C'));
@@ -171,6 +176,50 @@ assert(has(m.rows{1, 7}, 'No usable sensor data'));
 assert(~isempty(e(1).engineering) & isnan(e(1).engineering.velocity));
 assert(strcmp(m.rows{1, 8}, 'v=n/a m/s  Re=n/a  f=n/a  dP=n/a Pa  |  dT/dt=n/a K/s  dP/dt=n/a Pa/s'));
 world('fail') = {};
+
+% ============================ REGRESSION: Odoo latched, our sensors say SAFE ============================
+% Found by Riya (2026-09-27): after a trip, once the reading relaxes, MATLAB's own
+% verdict can go back to SAFE while Odoo still has the valve latched closed from the
+% earlier CRITICAL. The row must show that mismatch and turn red - green here would
+% mean "the screen says safe while the plant's actually shut".
+% Only feed_pipeline is latched - the other four stay on 'normal' (no odoo_status
+% at all), so this also proves the override is per-location, not global.
+w = make_world(locs, normal);
+w.feed_pipeline.odoo_status      = 'critical';
+w.feed_pipeline.odoo_valve_state = 'closed';
+world('raw') = w;
+[e, ~] = poll_cycle(cfg, settings);
+m = dashboard_update([], e, info0);
+assert(strcmp(e(1).status, 'SAFE'));                              % our own sensor verdict: fine
+assert(strcmp(e(1).odoo_live_status, 'critical') & strcmp(e(1).odoo_live_valve, 'closed'));
+assert(strcmp(m.rows{1, 1}, 'SAFE'));                              % the Status column is unchanged...
+assert(strcmp(m.rows{1, 9}, 'closed / critical'));                 % ...but Valve (Odoo) shows the truth
+assert(isequal(m.row_colors(1, :), RED));                          % ...and the WHOLE row is forced red
+for k = 2:5
+    assert(isequal(m.row_colors(k, :), GREEN));                    % other locations are unaffected
+end
+
+% Odoo says open/safe -> no override, normal green stands
+w.feed_pipeline.odoo_status = 'safe';  w.feed_pipeline.odoo_valve_state = 'open';
+world('raw') = w;
+[e, ~] = poll_cycle(cfg, settings);
+m = dashboard_update([], e, info0);
+assert(isequal(m.row_colors(1, :), GREEN));
+assert(strcmp(m.rows{1, 9}, 'open / safe'));
+
+% Odoo latched via valve_state alone (status field absent/odd) still forces red -
+% either signal is enough, matching Riya's "closed/CRITICAL" either-or
+w.feed_pipeline.odoo_status = '';  w.feed_pipeline.odoo_valve_state = 'closed';
+world('raw') = w;
+[e, ~] = poll_cycle(cfg, settings);
+m = dashboard_update([], e, info0);
+assert(isequal(m.row_colors(1, :), RED));
+assert(strcmp(m.rows{1, 9}, 'closed / ?'));
+for k = 2:5
+    assert(isequal(m.row_colors(k, :), GREEN));                    % still unaffected
+end
+
+world('raw') = make_world(locs, normal);   % restore for whatever follows
 
 % ============================ banner ============================
 m = dashboard_update([], e, info0);

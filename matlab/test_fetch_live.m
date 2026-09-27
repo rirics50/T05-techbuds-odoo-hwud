@@ -19,9 +19,24 @@ assert(raw.temperature_F == 180.03026594752444);       % temperature_f -> temper
 assert(raw.pressure_psi == 56.11123883901161);
 assert(raw.flow_gpm == 2.7330727531109007);
 assert(strcmp(raw.timestamp, '2026-09-25T18:28:00.464397+00:00'));
-% only the fields adapt_reading needs; Odoo's own status/valve_state are dropped
-assert(isequal(sort(fieldnames(raw)), ...
-               sort({'location';'temperature_F';'pressure_psi';'flow_gpm';'timestamp'})));
+% Odoo's own status/valve_state ARE passed through now (display-only: found by
+% Riya, 2026-09-27 - a fresh SAFE reading must not hide an earlier latch/CRITICAL).
+assert(isequal(sort(fieldnames(raw)), sort({'location';'temperature_F';'pressure_psi'; ...
+              'flow_gpm';'timestamp';'odoo_status';'odoo_valve_state'})));
+assert(strcmp(raw.odoo_status, 'safe') & strcmp(raw.odoo_valve_state, 'open'));
+
+% ---- Odoo's real latched-CRITICAL shape: what the dashboard must actually catch ----
+latched = jsondecode(strrep(strrep(real_json, '"safe"', '"critical"'), '"open"', '"closed"'));
+raw_l = parse_live_reading(latched, 'column_bottom');
+assert(strcmp(raw_l.odoo_status, 'critical') & strcmp(raw_l.odoo_valve_state, 'closed'));
+
+% ---- Missing/non-char status or valve_state -> '', never an error ----
+no_status = rmfield(resp, 'status');
+raw_ns = parse_live_reading(no_status, 'column_bottom');
+assert(strcmp(raw_ns.odoo_status, '') & strcmp(raw_ns.odoo_valve_state, 'open'));
+weird = resp;  weird.valve_state = 42;   % not a string
+raw_w = parse_live_reading(weird, 'column_bottom');
+assert(strcmp(raw_w.odoo_valve_state, ''));
 
 % ---- It feeds adapt_reading directly, including the real timestamp format ----
 [rd, ~] = adapt_reading(raw, 1.7e9);

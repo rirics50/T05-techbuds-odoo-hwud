@@ -7,9 +7,17 @@ function raw = parse_live_reading(resp, location)
 %      "flow_gpm":2.73, "timestamp":"2026-09-25T18:28:00.464397+00:00",
 %      "status":"safe", "valve_state":"open"}
 %   Note the lowercase 'f' in temperature_f, and that the time field is called
-%   'timestamp'. status / valve_state are Odoo's own state and are ignored here.
+%   'timestamp'.
 %
-%   raw   location, temperature_F, pressure_psi, flow_gpm, timestamp
+%   status / valve_state are Odoo's OWN authoritative state (its latch, not our
+%   sensor-based verdict) and are passed through as raw.odoo_status /
+%   raw.odoo_valve_state, DISPLAY ONLY (found by Riya, 2026-09-27: without this,
+%   the dashboard could show green/SAFE from a fresh reading while Odoo still has
+%   the valve latched closed from an earlier trip). Missing/non-char -> '', never
+%   an error: a fetch must not fail just because these happen to be absent.
+%
+%   raw   location, temperature_F, pressure_psi, flow_gpm, timestamp,
+%         odoo_status, odoo_valve_state (both '' if Odoo didn't send them)
 %
 %   Errors (error id parse_live_reading:*) on anything unusable, so the caller
 %   counts it as a failed fetch instead of judging bad data as SAFE.
@@ -63,5 +71,19 @@ function raw = parse_live_reading(resp, location)
                  'temperature_F', resp.temperature_f, ...
                  'pressure_psi', resp.pressure_psi, ...
                  'flow_gpm', resp.flow_gpm, ...
-                 'timestamp', ts);
+                 'timestamp', ts, ...
+                 'odoo_status', char_or_blank(resp, 'status'), ...
+                 'odoo_valve_state', char_or_blank(resp, 'valve_state'));
+end
+
+function s = char_or_blank(resp, field)
+% resp.(field) if it's a non-empty char, else '' - never errors, since these two
+% fields are display-only extras that may legitimately be absent.
+    s = '';
+    if isfield(resp, field)
+        v = resp.(field);   % dynamic field name via (...)
+        if ischar(v)
+            s = v;
+        end
+    end
 end

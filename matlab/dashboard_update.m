@@ -23,7 +23,8 @@ function model = dashboard_update(model, entries, info)
     if isempty(model)
         model = struct();
         model.columns = {'Status', 'Temperature', 'Pressure', 'Flow', ...
-                         'Limits (T | P | flow)', 'Age', 'Reason', 'Engineering'};
+                         'Limits (T | P | flow)', 'Age', 'Reason', 'Engineering', ...
+                         'Valve (Odoo)'};
         model.max_points = 120;        % about 2 minutes at a 1 s poll
         model.t0 = NaN;
         model.last_ts = struct();
@@ -91,6 +92,28 @@ function model = dashboard_update(model, entries, info)
             color = colors(find(strcmp(st, statuses)), :);
         end
 
+        % ---- Odoo's OWN authoritative status/valve (its latch), NOT our sensor
+        % verdict above. Found by Riya (2026-09-27): a fresh SAFE reading can arrive
+        % while Odoo still has the valve latched closed from an earlier trip - this
+        % is what actually controls the plant, so it must never be hidden behind a
+        % green row. '' (both fields blank) means the fetch failed or Odoo didn't
+        % send them, e.g. older test fixtures with no status/valve_state at all. ----
+        odoo_valve  = e.odoo_live_valve;
+        odoo_status = e.odoo_live_status;
+        if isempty(odoo_valve) & isempty(odoo_status)
+            valvestr = 'n/a';
+        else
+            valvestr = sprintf('%s / %s', blank_or('?', odoo_valve), blank_or('?', odoo_status));
+        end
+        odoo_latched = strcmpi(odoo_valve, 'closed') | strcmpi(odoo_status, 'critical');
+        if odoo_latched
+            % Overrides whatever colour our own sensor verdict picked above: a row
+            % must never read green while Odoo's real valve is shut. There is no
+            % simple single-cell colour in a classic uitable, so the whole row is
+            % forced red - the one case this must be impossible to miss.
+            color = [0.98 0.68 0.68];
+        end
+
         % ---- limits actually used this cycle ----
         lim = e.limits;
         if isempty(lim)
@@ -135,7 +158,8 @@ function model = dashboard_update(model, entries, info)
             limstr, ...
             age_text, ...
             reason, ...
-            engstr};
+            engstr, ...
+            valvestr};
         model.row_colors(k, :) = color;
 
         % ---- history (NaN keeps a gap in the line when there is no reading) ----
@@ -232,6 +256,13 @@ function v = numfield(s, name)
                 end
             end
         end
+    end
+end
+
+function s = blank_or(default_s, s)
+% s if non-empty, else default_s. (MATLAB has no built-in "value or default" for strings.)
+    if isempty(s)
+        s = default_s;
     end
 end
 

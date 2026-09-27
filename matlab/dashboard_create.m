@@ -5,9 +5,12 @@ function h = dashboard_create(locations)
 %   Layout (top to bottom): banner, status table (one row per location, colour
 %   coded, with an Engineering column showing velocity/Reynolds/friction factor/
 %   pressure drop/both rates - the same numbers to_engineering_payload sends to
-%   Odoo, computed every cycle regardless of send_engineering), then a 3 x N grid
-%   of charts (temperature, pressure, flow; one column per location), each with
-%   its limit (red dashed) and AT_RISK band (amber dashed).
+%   Odoo, computed every cycle regardless of send_engineering; and a Valve (Odoo)
+%   column showing Odoo's OWN reported status/valve state, which forces the whole
+%   row red if Odoo has the valve latched closed even when our sensor verdict
+%   above would otherwise show green), then a 3 x N grid of charts (temperature,
+%   pressure, flow; one column per location), each with its limit (red dashed)
+%   and AT_RISK band (amber dashed).
 %
 %   Graphics only. NOT covered by the automated tests: it needs a display.
 %   Uses classic figure/uitable/axes so it works on older MATLAB versions too.
@@ -29,10 +32,10 @@ function h = dashboard_create(locations)
     % Must match dashboard_update's model.columns exactly (order and count): that
     % function builds each row, this only declares the headers/widths once.
     cols = {'Status', 'Temperature', 'Pressure', 'Flow', 'Limits (T | P | flow)', ...
-            'Age', 'Reason', 'Engineering'};
+            'Age', 'Reason', 'Engineering', 'Valve (Odoo)'};
     h.table = uitable(h.fig, 'Units', 'normalized', 'Position', [0.01 0.60 0.98 0.30], ...
                       'ColumnName', cols, 'RowName', locations, 'FontSize', 11, ...
-                      'ColumnWidth', {90, 150, 150, 160, 260, 60, 420, 460}, ...
+                      'ColumnWidth', {90, 150, 150, 160, 260, 60, 360, 460, 140}, ...
                       'ForegroundColor', [0.05 0.05 0.05], ...   % near-black text, legible on all 4 row colors
                       'Data', repmat({''}, n, numel(cols)));
 

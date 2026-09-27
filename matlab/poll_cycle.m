@@ -15,7 +15,10 @@ function [entries, state] = poll_cycle(cfg, settings, state)
 %             eng_sent, eng_msg (engineering-results POST, when enabled),
 %             and, for display only (they never affect a decision):
 %             poll_time_s, raw (as fetched), reading (adapted, SI), limits (used),
-%             engineering (to_engineering_payload(result), always computed)
+%             engineering (to_engineering_payload(result), always computed),
+%             odoo_live_status, odoo_live_valve (Odoo's OWN status/valve from the
+%             GET, not our sensor-based verdict; '' if the fetch failed or Odoo
+%             didn't send them)
 %
 %   One location failing (fetch error, bad config, a bug) never stops the
 %   others: its error is recorded in entries(k).error and the loop moves on.
@@ -90,6 +93,12 @@ function [e, state] = process_location(e, loc, cfg, settings, state, now_s, send
     end
 
     raw.location = loc;   % our loop's name is authoritative
+
+    % Odoo's OWN authoritative status/valve state (its latch), display-only, kept
+    % separate from e.status/e.odoo_status which are OUR sensor-based verdict.
+    % Blank when the fetch failed (raw = struct()) or Odoo didn't send them.
+    e.odoo_live_status = char_or_blank_field(raw, 'odoo_status');
+    e.odoo_live_valve  = char_or_blank_field(raw, 'odoo_valve_state');
 
     [reading, fluid] = adapt_reading(raw, now_s);
 
@@ -241,5 +250,19 @@ function e = blank_entry(loc)
                'valve_command', NaN, 'reason', '', 'shutdown_signal', NaN, ...
                'url', '', 'sent', false, 'send_msg', '', ...
                'skipped', false, 'error', '', 'eng_sent', false, 'eng_msg', '', ...
-               'poll_time_s', NaN, 'raw', [], 'reading', [], 'limits', [], 'engineering', []);
+               'poll_time_s', NaN, 'raw', [], 'reading', [], 'limits', [], 'engineering', [], ...
+               'odoo_live_status', '', 'odoo_live_valve', '');
+end
+
+function s = char_or_blank_field(raw, field)
+% raw.(field) if it's a non-empty char, else '' - never errors.
+    s = '';
+    if isstruct(raw)
+        if isfield(raw, field)
+            v = raw.(field);   % dynamic field name via (...)
+            if ischar(v)
+                s = v;
+            end
+        end
+    end
 end
